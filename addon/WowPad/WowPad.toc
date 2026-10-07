@@ -12,4 +12,5 @@ UnitMenu.lua
 ActionBar.lua
 Radial.lua
 BlizzBars.lua
+ExtraBars.lua
 Crosshair.lua

@@ -2,7 +2,8 @@
 --
 -- Frames are re-parented to a hidden frame instead of hidden, so stock code that shows them later
 -- (stance change, level up) cannot bring them back. Their key bindings still work. Off by
--- default: on 1.12 the main bar also holds the XP bar, the bag buttons and the micro menu.
+-- default. While they are hidden WowPad shows its own XP, reputation and pet bars (ExtraBars.lua);
+-- bags and menus are on the Start wheel.
 
 local WP = WowPad
 
@@ -37,6 +38,7 @@ end
 function WP.ToggleBlizzBars()
   WowPadDB.hideBlizz = not WowPadDB.hideBlizz
   Apply(WowPadDB.hideBlizz)
+  if WP.Extra then WP.Extra.ApplyShown() end
   WP.Print("Blizzard bars and bottom art: " .. (WowPadDB.hideBlizz and "hidden" or "shown"))
 end
 

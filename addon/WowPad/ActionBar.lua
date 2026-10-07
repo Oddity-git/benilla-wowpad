@@ -383,6 +383,7 @@ function Bar.SetEditing(on)
   if not Bar.editing then liteView = 0 end
   if WP.RadialSetEditing then WP.RadialSetEditing(Bar.editing) end
   if WP.Ring and WP.Ring.SetEditing then WP.Ring.SetEditing(Bar.editing) end
+  if WP.Extra then WP.Extra.SetEditing(Bar.editing) end
   UpdateTabs()
   Bar.UpdateVisibility()
   if Bar.editing then
