@@ -30,7 +30,7 @@ local PAGES = {
     { "Edit Bar",       "Interface\\Icons\\Trade_Engineering",              function() WP.ToggleEdit() end },
     { "Blizzard Bars",  "Interface\\Icons\\INV_Misc_EngGizmos_01",          function() WP.ToggleBlizzBars() end },
     { "Crosshair",      "Interface\\Icons\\Ability_Hunter_SniperShot",      function() WP.ToggleCrosshair() end },
-    { "Bar Visibility", "Interface\\Icons\\Spell_Shadow_DetectInvisibility", function() WP.Bar.ToggleAlways() end },
+    { "WowPad Options", "Interface\\Icons\\INV_Gizmo_02",                function() WP.OpenOptions() end },
   },
 }
 local RADIUS, WEDGE = 120, 44     -- icon distance from the centre, icon size
@@ -234,35 +234,33 @@ function WP.RadialBumper(which)
   return true
 end
 
--- Stick-direction selection: the right stick moves the pointer while the wheel is open, so the
--- direction the pointer moves is the direction the stick is held. Hold a direction to select
--- that wedge; it stays selected on release.
--- Selecting warps the pointer onto the wedge; that jump is not stick motion, so the history
--- restarts a moment after it.
-local hist, histN, SAMPLE_WINDOW, MIN_TRAVEL, quietUntil = {}, 0, 0.06, 10, 0
-R:SetScript("OnShow", function() histN = 0 end)
+-- Selection by where the pointer is: the wedge in its direction from the hub, once it is a little
+-- way out (the middle keeps the last pick). The D-pad puts the pointer on a wedge (Nav.Move), so
+-- both agree. In controller mode a pointer pushed past the ring is pulled back onto it, so the
+-- right stick cannot wander off the wheel. A presses the selected wedge (SlotSignal), wherever
+-- the pointer is.
+local PICK, CLAMP = 0.35 * RADIUS, 1.3 * RADIUS
 R:SetScript("OnHide", function() Highlight(nil) end)
 R:SetScript("OnUpdate", function()
-  local cur = WP.Nav and WP.Nav.cur
+  local Nav = WP.Nav
+  if not Nav then return end
+  local cur = Nav.cur
   Highlight(cur and cur.index and wedges[cur.index] == cur and cur.index or nil)
+  if GetTime() - (Nav.selectedAt or 0) < 0.15 then return end   -- a D-pad warp still landing
+  local hx, hy = hub:GetCenter()
+  if not hx then return end
+  local s = hub:GetEffectiveScale()
+  hx, hy = hx * s, hy * s
   local x, y = GetCursorPosition()
-  local now = GetTime()
-  if now < quietUntil then histN = 0 return end
-  histN = histN + 1
-  hist[histN] = { now, x, y }
-  local first = 1
-  while first < histN and now - hist[first][1] > SAMPLE_WINDOW do first = first + 1 end
-  if first > 1 then
-    for i = first, histN do hist[i - first + 1] = hist[i] end
-    histN = histN - first + 1
-  end
-  local dx, dy = x - hist[1][2], y - hist[1][3]
-  if dx * dx + dy * dy < MIN_TRAVEL * MIN_TRAVEL then return end
+  local dx, dy = x - hx, y - hy
+  local d = math.sqrt(dx * dx + dy * dy)
+  if d < PICK * s then return end
   local deg = math.deg(math.atan2(dy, dx))          -- 0 = right, 90 = up
+  if d > CLAMP * s and WP.mode == "controller" then
+    local a = math.rad(deg)
+    Nav.WarpAbs(hx + math.cos(a) * RADIUS * s, hy + math.sin(a) * RADIUS * s)
+  end
   local idx = math.mod(math.floor(math.mod(90 - deg + 360 + 22.5, 360) / 45), 8) + 1
   local w = wedges[idx]
-  if w and w:IsShown() and WP.Nav and WP.Nav.cur ~= w then
-    WP.Nav.Select(w)
-    quietUntil = now + 0.1
-  end
+  if w and w:IsShown() then Nav.cur = w end
 end)

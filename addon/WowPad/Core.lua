@@ -39,7 +39,7 @@ WP.WINDOWS = {
   "ItemTextFrame", "GuildRegistrarFrame", "PetitionFrame", "TabardFrame", "HelpFrame",
   "DressUpFrame", "BattlefieldFrame", "PetPaperDollFrame", "AddonList", "ChatConfigFrame",
   "StaticPopup1", "StaticPopup2", "StaticPopup3", "StaticPopup4", "DropDownList1",
-  "ColorPickerFrame", "BenillaOptionsFrame",
+  "ColorPickerFrame", "BenillaOptionsFrame", "WowPadOptionsFrame",
 }
 for i = 1, 12 do table.insert(WP.WINDOWS, "ContainerFrame" .. i) end
 
@@ -139,10 +139,28 @@ function Nav.Select(f)
   Nav.cur = f
   if not f then return end
   local x, y = Centre(f)
-  if not x then return end
+  if x then Nav.WarpAbs(x, y) end
+end
+
+-- Put the pointer at absolute units (GetCursorPosition's).
+function Nav.WarpAbs(x, y)
   local s = UIParent:GetEffectiveScale()
   local w, h = GetScreenWidth() * s, GetScreenHeight() * s
   if w > 0 and h > 0 then WP.warpX, WP.warpY = x / w, y / h end
+  Nav.selectedAt = GetTime()
+end
+
+-- Our own menus (the wheel, the target menu): A presses the selected button here instead of a
+-- mouse click, so it works wherever the pointer is.
+function WP.OwnMenu()
+  if WP.Radial and WP.Radial:IsVisible() then return WP.Radial end
+  if WP.UnitMenu and WP.UnitMenu:IsVisible() then return WP.UnitMenu end
+  return nil
+end
+
+function Nav.Press()
+  local menu, f = WP.OwnMenu(), Nav.cur
+  if menu and f and f:IsVisible() and f:GetParent() == menu then f:Click() end
 end
 
 -- The same on the next frame, for a window that only just opened (its layout is not in yet).
@@ -236,8 +254,9 @@ local function SlotSignal(i, down)
     if not down then return end
     local sig = WP.SLOT_SIGNALS[i]
     if i <= 4 then Nav.Move(sig)
+    elseif i == 5 and WP.OwnMenu() then Nav.Press()
     elseif i == 6 then Nav.Back() end
-    -- A and X are mouse clicks, pressed by benilla-wowpad; Y has nothing yet.
+    -- Elsewhere A and X are mouse clicks, pressed by benilla-wowpad; Y has nothing yet.
     return
   end
   if set == 0 and i >= 5 then FixedSlot(i, down) return end
@@ -486,7 +505,7 @@ function WowPad_Frame()
     inv, tonumber(db.wpPeekDelay) or 0,
     db.wpWalkRun == true, db.wpCamSmooth == true, db.wpBumperFlick == true,
     tonumber(db.wpRingSlot) or 0,
-    MenuContext() and WP.set <= 0 and true or false,
+    MenuContext() and WP.set <= 0 and not WP.OwnMenu() and true or false,
     wx, wy
 end
 
@@ -583,6 +602,8 @@ SlashCmdList["WOWPAD"] = function(msg)
     Print("Crosshair peek (tooltips when the right stick rests): " .. (WowPadDB.peek and "on" or "off"))
   elseif cmd == "blizz" then
     if WP.ToggleBlizzBars then WP.ToggleBlizzBars() end
+  elseif cmd == "options" or cmd == "o" then
+    if WP.OpenOptions then WP.OpenOptions() end
   elseif cmd == "edit" then
     if WP.ToggleEdit then WP.ToggleEdit() end
   elseif cmd == "scale" then
@@ -626,7 +647,7 @@ SlashCmdList["WOWPAD"] = function(msg)
   else
     Print(string.format("mode=%s set=%s context=%s pointer=%s", WP.mode, tostring(WP.set),
       tostring(WP.context), tostring(WP.pointer)))
-    Print("/wp edit | bar | lite | blizz | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
+    Print("/wp options | edit | bar | lite | blizz | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
           .. " | invert | smooth | walk | swap | healer | ring <set_slot|off> | xattack | xbox | ps | status | debug")
   end
 end

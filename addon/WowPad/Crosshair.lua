@@ -66,3 +66,52 @@ function WP.ToggleCrosshair()
   WowPadDB.crosshair = (WowPadDB.crosshair == false)
   WP.Print("Crosshair: " .. (WowPadDB.crosshair and "on" or "off"))
 end
+
+-- The pointer, drawn: while the pad drives, benilla-wowpad hides the OS cursor (Wayland cannot
+-- move it, and ending camera look would flash it) and moves benilla's pointer itself, so this
+-- draws the game's cursor art there. Hidden during camera look and the peek (the dot is the
+-- pointer then).
+local P = CreateFrame("Frame", "WowPadPointer", UIParent)
+P:SetFrameStrata("TOOLTIP")
+P:SetFrameLevel(100)
+P:SetWidth(32)
+P:SetHeight(32)
+P:Hide()
+local ptex = P:CreateTexture(nil, "OVERLAY")
+ptex:SetAllPoints(P)
+local ART = {
+  point  = "Interface\\Cursor\\Point",
+  attack = "Interface\\Cursor\\Attack",
+  speak  = "Interface\\Cursor\\Speak",
+  cast   = "Interface\\Cursor\\Cast",
+}
+local curArt
+WP.screenH = 768
+
+-- benilla-wowpad: the window's height in pixels, so the pointer is 32 pixels like the real one.
+function WowPad_SetScreen(h)
+  if h and h > 0 then WP.screenH = h end
+end
+
+local pdriver = CreateFrame("Frame")
+pdriver:SetScript("OnUpdate", function()
+  if not (WP.mode == "controller" and not IsMouselooking() and not WP.peeking) then
+    if P:IsShown() then P:Hide() end
+    return
+  end
+  local x, y = GetCursorPosition()
+  local s = UIParent:GetEffectiveScale()
+  local size = 32 * GetScreenHeight() / WP.screenH   -- 32 pixels in UIParent units
+  P:SetWidth(size)
+  P:SetHeight(size)
+  P:ClearAllPoints()
+  P:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / s, y / s)
+  local art = ART.point
+  if SpellIsTargeting() then art = ART.cast
+  elseif UnitExists("mouseover") then
+    if UnitCanAttack("player", "mouseover") then art = ART.attack
+    elseif not UnitIsPlayer("mouseover") then art = ART.speak end
+  end
+  if curArt ~= art then ptex:SetTexture(art); curArt = art end
+  if not P:IsShown() then P:Show() end
+end)

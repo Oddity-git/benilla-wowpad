@@ -24,7 +24,7 @@ use bevy::input::keyboard::KeyboardInput;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::input::InputSystems;
 use bevy::prelude::*;
-use bevy::window::{CursorOptions, PrimaryWindow};
+use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use config::Config;
 use pad::{Layout, PadState};
@@ -40,7 +40,8 @@ impl Plugin for WowPadPlugin {
             .insert_resource(Config::load())
             .init_resource::<Mapper>()
             .add_systems(Startup, addon::install_addon)
-            .add_systems(PreUpdate, (log_pads, drive).chain().after(InputSystems));
+            .add_systems(PreUpdate, (log_pads, drive).chain().after(InputSystems))
+            .add_systems(PostUpdate, hide_os_cursor);
     }
 }
 
@@ -154,8 +155,10 @@ struct Mapper {
     place: Place,
     /// Keys we pressed (Back + A / B) to let go of next frame.
     keys_down: Vec<KeyCode>,
-    /// The OS cursor is hidden by us (the crosshair peek).
-    cursor_hidden: bool,
+    /// The pad drives the pointer: the OS cursor stays hidden and the addon draws one.
+    hide_os: bool,
+    /// The window height last told to the addon (it sizes its drawn pointer by it).
+    screen_h: u32,
     announced: bool,
     glue: Vec<(GamepadButton, glue::GlueInput)>,
 }
@@ -202,7 +205,8 @@ impl Default for Mapper {
             real_travel: 0.0,
             place: Place::Idle,
             keys_down: Vec::new(),
-            cursor_hidden: false,
+            hide_os: false,
+            screen_h: 0,
             announced: false,
             glue: Vec::new(),
         }
@@ -216,7 +220,6 @@ struct Io<'a> {
     now: f64,
     dt: f32,
     window: Option<Mut<'a, Window>>,
-    cursor: Option<Mut<'a, CursorOptions>>,
     motion: &'a mut AccumulatedMouseMotion,
     mouse: &'a mut ButtonInput<MouseButton>,
     /// Key edges to send after the tick (Back + A / B).
@@ -261,32 +264,35 @@ impl Io<'_> {
         Some(Vec2::new(w.width() / 2.0, w.height() / 2.0 - up))
     }
 
-    fn set_cursor_visible(&mut self, visible: bool) {
-        if let Some(c) = self.cursor.as_deref_mut() {
-            if c.visible != visible {
-                c.visible = visible;
-            }
+    /// Move benilla's pointer without a change on the window, so bevy_winit does not ask the OS
+    /// to warp its own: Wayland refuses (an error each frame), and while the pad drives the OS
+    /// cursor is hidden and the addon draws the pointer. [`hide_os_cursor`] warps the OS cursor
+    /// once, when the mouse takes over again.
+    fn put_cursor(&mut self, to: Vec2) {
+        if let Some(w) = self.window.as_mut() {
+            let max = Vec2::new(w.width() - 1.0, w.height() - 1.0);
+            w.bypass_change_detection()
+                .set_cursor_position(Some(to.clamp(Vec2::ZERO, max.max(Vec2::ZERO))));
         }
     }
 
     fn move_cursor_by(&mut self, d: Vec2) {
-        if let Some(w) = self.window.as_deref_mut() {
-            let at = w
-                .cursor_position()
-                .unwrap_or(Vec2::new(w.width() / 2.0, w.height() / 2.0));
-            let to = (at + d).clamp(Vec2::ZERO, Vec2::new(w.width() - 1.0, w.height() - 1.0));
-            w.set_cursor_position(Some(to));
-        }
+        let Some(at) = self.window.as_deref().map(|w| {
+            w.cursor_position()
+                .unwrap_or(Vec2::new(w.width() / 2.0, w.height() / 2.0))
+        }) else {
+            return;
+        };
+        self.put_cursor(at + d);
     }
 
     fn park_cursor(&mut self) {
         let Some(target) = self.crosshair() else {
             return;
         };
-        if let Some(w) = self.window.as_deref_mut() {
-            if w.cursor_position().is_none_or(|p| p.distance(target) > 1.0) {
-                w.set_cursor_position(Some(target));
-            }
+        let at = self.window.as_deref().and_then(Window::cursor_position);
+        if at.is_none_or(|p| p.distance(target) > 1.0) {
+            self.put_cursor(target);
         }
     }
 }
@@ -365,7 +371,7 @@ fn drive(
     mut motion: ResMut<AccumulatedMouseMotion>,
     mut m: ResMut<Mapper>,
     mut interact: MessageWriter<TargetInteract>,
-    mut windows: Query<(&mut Window, &mut CursorOptions), With<PrimaryWindow>>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut key_events: MessageWriter<KeyboardInput>,
@@ -398,8 +404,7 @@ fn drive(
         // Before the world, or without the addon: the glue screens' keys.
         let mut glue = std::mem::take(&mut m.glue);
         *m = Mapper::default();
-        let window = windows.single_mut().ok();
-        let mut window = window.map(|(w, _)| w);
+        let mut window = windows.single_mut().ok();
         glue::drive(
             gamepad,
             cfg.cursor_speed,
@@ -446,10 +451,17 @@ fn drive(
     }
 
     let s = PadState::read(gamepad, layout, cfg.stick_deadzone, cfg.trigger_threshold);
-    let (window, cursor) = match windows.single_mut() {
-        Ok((w, c)) => (Some(w), Some(c)),
-        Err(_) => (None, None),
-    };
+    let window = windows.single_mut().ok();
+    if let Some(h) = window.as_ref().map(|w| w.physical_height()) {
+        if h != m.screen_h {
+            m.screen_h = h;
+            if let Err(e) = script.run(&format!(
+                "if WowPad_SetScreen then WowPad_SetScreen({h}) end"
+            )) {
+                warn!("wowpad: WowPad_SetScreen failed: {e}");
+            }
+        }
+    }
     let focused = window.as_ref().is_none_or(|w| w.focused);
     let real_motion = motion.delta.length();
     let real_press = keys.get_just_pressed().next().is_some()
@@ -463,7 +475,6 @@ fn drive(
         now: time.elapsed_secs_f64(),
         dt: time.delta_secs(),
         window,
-        cursor,
         motion: &mut motion,
         mouse: &mut mouse,
         key_out: Vec::new(),
@@ -482,6 +493,7 @@ fn drive(
     );
     let (key_out, interact_out) = (std::mem::take(&mut io.key_out), io.interact_out);
     drop(io);
+    m.hide_os = m.controller && m.enabled && m.focused;
     for (k, down) in key_out {
         glue::key(k, down, &mut keys, &mut key_events);
     }
@@ -561,10 +573,6 @@ fn update(
         set_mode(m, io, true, "pad input");
     }
     if !m.controller {
-        if m.cursor_hidden {
-            io.set_cursor_visible(true);
-            m.cursor_hidden = false;
-        }
         m.prev = s.buttons;
         return;
     }
@@ -666,10 +674,6 @@ fn release_controller_state(m: &mut Mapper, io: &mut Io, tell_addon: bool) {
     m.sm = Vec2::ZERO;
     m.cam_active = false;
     m.eaten = [false; 8];
-    if m.cursor_hidden {
-        io.set_cursor_visible(true);
-        m.cursor_hidden = false;
-    }
 }
 
 fn update_kill_switch(m: &mut Mapper, io: &mut Io, s: &PadState) -> bool {
@@ -1133,27 +1137,41 @@ fn update_pointer(m: &mut Mapper, io: &mut Io, s: &PadState) {
     }
 }
 
-/// The crosshair peek: camera look paused with no window open, the cursor parked under the
-/// crosshair and hidden, so what is under it shows its tooltip and takes the clicks.
+/// The crosshair peek: camera look paused with no window open, the pointer parked under the
+/// crosshair, so what is under it shows its tooltip and takes the clicks.
 fn update_cursor(m: &mut Mapper, io: &mut Io) {
     // Menu navigation moved to a button: put the pointer on it.
-    if let (Some(f), Some(w)) = (io.frame.warp, io.window.as_deref_mut()) {
-        let to = Vec2::new(f.x * w.width(), (1.0 - f.y) * w.height());
-        w.set_cursor_position(Some(
-            to.clamp(Vec2::ZERO, Vec2::new(w.width() - 1.0, w.height() - 1.0)),
-        ));
-    }
-    let peeking = !m.pointer && !io.frame.menu && !io.frame.looking;
-    if peeking {
-        io.park_cursor();
-        if !m.cursor_hidden {
-            io.set_cursor_visible(false);
-            m.cursor_hidden = true;
+    if let Some(f) = io.frame.warp {
+        if let Some((w, h)) = io.window.as_deref().map(|w| (w.width(), w.height())) {
+            io.put_cursor(Vec2::new(f.x * w, (1.0 - f.y) * h));
         }
-    } else if m.cursor_hidden {
-        m.cursor_hidden = false;
-        if !io.frame.looking {
-            io.set_cursor_visible(true);
+    }
+    if !m.pointer && !io.frame.menu && !io.frame.looking {
+        io.park_cursor();
+    }
+}
+
+/// PostUpdate, after the camera: keep the OS cursor hidden while the pad drives the pointer.
+/// Ending camera look shows it (`release_cursor`); writing it back here in the same frame means
+/// bevy_winit never sees it shown, so it does not flash. When the mouse takes over, the OS cursor
+/// is warped to benilla's pointer (once) and shown, unless a camera look holds it.
+fn hide_os_cursor(
+    m: Res<Mapper>,
+    mut was_hidden: Local<bool>,
+    mut windows: Query<(&mut Window, &mut CursorOptions), With<PrimaryWindow>>,
+) {
+    let Ok((mut window, mut cursor)) = windows.single_mut() else {
+        return;
+    };
+    if m.hide_os {
+        if cursor.visible {
+            cursor.visible = false;
+        }
+        *was_hidden = true;
+    } else if std::mem::take(&mut *was_hidden) {
+        window.set_changed();
+        if cursor.grab_mode == CursorGrabMode::None && !cursor.visible {
+            cursor.visible = true;
         }
     }
 }

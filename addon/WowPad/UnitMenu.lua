@@ -84,3 +84,19 @@ function M.Open()
   M:Show()
   if WP.Nav then WP.Nav.SelectSoon(buttons[1]) end
 end
+
+-- The selected item is lit; the pointer resting on an item selects it (A presses the selected
+-- one, Core.lua's Nav.Press).
+M:SetScript("OnUpdate", function()
+  local Nav = WP.Nav
+  if not Nav then return end
+  local settled = GetTime() - (Nav.selectedAt or 0) > 0.15
+  for i = 1, MAX_ITEMS do
+    local b = buttons[i]
+    if b:IsShown() and settled and MouseIsOver(b) then Nav.cur = b end
+  end
+  for i = 1, MAX_ITEMS do
+    local b = buttons[i]
+    if b == Nav.cur then b:LockHighlight() else b:UnlockHighlight() end
+  end
+end)

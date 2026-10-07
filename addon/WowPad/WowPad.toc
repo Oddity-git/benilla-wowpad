@@ -14,3 +14,5 @@ Radial.lua
 BlizzBars.lua
 ExtraBars.lua
 Crosshair.lua
+Options.lua
+MinimapButton.lua
