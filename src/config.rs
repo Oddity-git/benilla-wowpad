@@ -47,6 +47,8 @@ pub struct Config {
     pub mouse_travel: f32,
     /// [Mode] Back held this long is bags instead of the map.
     pub back_hold_ms: f64,
+    /// [Input] the pad's raw Linux layout (triggers as Z axes, X and Y swapped): `None` = detect.
+    pub raw_layout: Option<bool>,
 }
 
 impl Default for Config {
@@ -73,6 +75,7 @@ impl Default for Config {
             click_release_at: 0.35,
             mouse_travel: 40.0,
             back_hold_ms: 400.0,
+            raw_layout: None,
         }
     }
 }
@@ -147,6 +150,13 @@ impl Config {
                 ("click", "releaseat") => set(&mut c.click_release_at, num, 0.0, 1.0),
                 ("mode", "mousetravel") => set(&mut c.mouse_travel, num, 0.0, 10000.0),
                 ("mode", "backholdms") => set_ms(&mut c.back_hold_ms, num, 5000.0),
+                ("input", "rawlayout") => {
+                    c.raw_layout = match value.to_ascii_lowercase().as_str() {
+                        "on" | "1" | "true" | "yes" => Some(true),
+                        "off" | "0" | "false" | "no" => Some(false),
+                        _ => None,
+                    }
+                }
                 _ => {}
             }
         }

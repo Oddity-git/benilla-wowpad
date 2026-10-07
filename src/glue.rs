@@ -96,11 +96,12 @@ pub fn drive(
     keys: &mut ButtonInput<KeyCode>,
     events: &mut MessageWriter<KeyboardInput>,
     held: &mut Vec<(GamepadButton, GlueInput)>,
+    layout: crate::pad::Layout,
 ) {
     let mut i = 0;
     while i < held.len() {
         let (button, input) = held[i];
-        if pad.is_none_or(|p| !p.pressed(button)) {
+        if pad.is_none_or(|p| !p.pressed(layout.button(button))) {
             release(input, mouse, keys, events);
             held.swap_remove(i);
         } else {
@@ -111,7 +112,7 @@ pub fn drive(
         return;
     };
     for button in GLUE_BUTTONS {
-        if !pad.just_pressed(button) {
+        if !pad.just_pressed(layout.button(button)) {
             continue;
         }
         if let Some(input) = glue_input(button) {

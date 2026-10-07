@@ -53,6 +53,48 @@ const BUTTONS: [(GamepadButton, u32); 14] = [
     (GamepadButton::North, Y),
 ];
 
+/// How a pad reports itself. A pad the input library has no mapping for comes through in the raw
+/// Linux layout: Xbox-style X / Y arrive as `North` / `West` (evdev's `BTN_X` is `BTN_NORTH`),
+/// and the triggers as the `LeftZ` / `RightZ` axes instead of `LeftTrigger2` / `RightTrigger2`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Layout {
+    /// The triggers are the Z axes, and X / Y are swapped.
+    pub raw: bool,
+    /// The Z axes run -1 (released) to 1 (pulled), rather than 0 to 1.
+    pub bipolar: bool,
+}
+
+impl Layout {
+    /// Learn from this poll: a Z axis that reports at all marks the raw layout, and a negative
+    /// reading a -1..1 range. `forced` is the ini's `RawLayout` (`None` = detect).
+    pub fn observe(&mut self, pad: &Gamepad, forced: Option<bool>) {
+        let z = [GamepadAxis::LeftZ, GamepadAxis::RightZ].map(|a| pad.get(a));
+        if z.iter().flatten().any(|v| *v < -0.05) {
+            self.bipolar = true;
+        }
+        self.raw = forced.unwrap_or(self.raw || z.iter().any(Option::is_some));
+    }
+
+    /// The button that is physically `button` on this pad.
+    pub fn button(self, button: GamepadButton) -> GamepadButton {
+        match (self.raw, button) {
+            (true, GamepadButton::West) => GamepadButton::North,
+            (true, GamepadButton::North) => GamepadButton::West,
+            _ => button,
+        }
+    }
+
+    /// A Z axis as a 0..1 trigger pull.
+    fn z(self, v: Option<f32>) -> f32 {
+        let v = v.unwrap_or(if self.bipolar { -1.0 } else { 0.0 });
+        if self.bipolar {
+            ((v + 1.0) / 2.0).clamp(0.0, 1.0)
+        } else {
+            v.clamp(0.0, 1.0)
+        }
+    }
+}
+
 /// One poll of the pad, deadzones applied.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct PadState {
@@ -67,20 +109,23 @@ pub struct PadState {
 }
 
 impl PadState {
-    pub fn read(pad: Option<&Gamepad>, stick_dz: f32, trigger_th: f32) -> Self {
+    pub fn read(pad: Option<&Gamepad>, layout: Layout, stick_dz: f32, trigger_th: f32) -> Self {
         let Some(pad) = pad else {
             return Self::default();
         };
         let mut buttons = 0;
         for (button, bit) in BUTTONS {
-            if pad.pressed(button) {
+            if pad.pressed(layout.button(button)) {
                 buttons |= bit;
             }
         }
         let l = radial(pad.left_stick(), stick_dz);
         let r = radial(pad.right_stick(), stick_dz);
-        let trigger = |b: GamepadButton| {
-            let v = pad.get(b).unwrap_or(if pad.pressed(b) { 1.0 } else { 0.0 });
+        let trigger = |b: GamepadButton, z: GamepadAxis| {
+            let mut v = pad.get(b).unwrap_or(if pad.pressed(b) { 1.0 } else { 0.0 });
+            if layout.raw {
+                v = v.max(layout.z(pad.get(z)));
+            }
             threshold(v, trigger_th)
         };
         Self {
@@ -90,8 +135,8 @@ impl PadState {
             ly: l.y,
             rx: r.x,
             ry: r.y,
-            lt: trigger(GamepadButton::LeftTrigger2),
-            rt: trigger(GamepadButton::RightTrigger2),
+            lt: trigger(GamepadButton::LeftTrigger2, GamepadAxis::LeftZ),
+            rt: trigger(GamepadButton::RightTrigger2, GamepadAxis::RightZ),
         }
     }
 
@@ -154,6 +199,28 @@ mod tests {
         assert!((v.x - 1.0).abs() < 1e-6);
         let mid = radial(Vec2::new(0.62, 0.0), 0.24);
         assert!((mid.x - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_raw_layout_swaps_x_and_y_and_reads_bipolar_z() {
+        let raw = Layout {
+            raw: true,
+            bipolar: true,
+        };
+        assert_eq!(raw.button(GamepadButton::West), GamepadButton::North);
+        assert_eq!(raw.button(GamepadButton::South), GamepadButton::South);
+        assert_eq!(
+            Layout::default().button(GamepadButton::West),
+            GamepadButton::West
+        );
+        assert_eq!(raw.z(Some(-1.0)), 0.0);
+        assert_eq!(raw.z(Some(1.0)), 1.0);
+        assert_eq!(raw.z(None), 0.0);
+        let unipolar = Layout {
+            raw: true,
+            bipolar: false,
+        };
+        assert_eq!(unipolar.z(Some(0.5)), 0.5);
     }
 
     #[test]

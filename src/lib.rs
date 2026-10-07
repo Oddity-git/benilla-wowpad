@@ -19,6 +19,7 @@ pub mod pad;
 
 use benilla_ui::script::UiScript;
 use benilla_world::interact::TargetInteract;
+use bevy::input::gamepad::{GamepadConnection, GamepadConnectionEvent};
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::input::InputSystems;
@@ -26,7 +27,8 @@ use bevy::prelude::*;
 use bevy::window::{CursorOptions, PrimaryWindow};
 
 use config::Config;
-use pad::PadState;
+use pad::{Layout, PadState};
+use std::collections::HashMap;
 
 /// The WowPad plugin: re-enables bevy's gilrs backend (benilla's boot disables it), keeps the
 /// addon installed, and runs [`drive`] after bevy's input update.
@@ -38,7 +40,7 @@ impl Plugin for WowPadPlugin {
             .insert_resource(Config::load())
             .init_resource::<Mapper>()
             .add_systems(Startup, addon::install_addon)
-            .add_systems(PreUpdate, drive.after(InputSystems));
+            .add_systems(PreUpdate, (log_pads, drive).chain().after(InputSystems));
     }
 }
 
@@ -356,7 +358,8 @@ fn read_frame(script: &UiScript) -> Option<Frame> {
 #[allow(clippy::too_many_arguments)]
 fn drive(
     script: Option<NonSendMut<UiScript>>,
-    pads: Query<&Gamepad>,
+    pads: Query<(Entity, &Gamepad)>,
+    mut layouts: Local<HashMap<Entity, Layout>>,
     cfg: Res<Config>,
     time: Res<Time>,
     mut motion: ResMut<AccumulatedMouseMotion>,
@@ -367,7 +370,23 @@ fn drive(
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut key_events: MessageWriter<KeyboardInput>,
 ) {
-    let gamepad = pads.iter().next();
+    let (gamepad, layout) = match pads.iter().next() {
+        Some((e, pad)) => {
+            let layout = layouts.entry(e).or_default();
+            let was = layout.raw;
+            layout.observe(pad, cfg.raw_layout);
+            if layout.raw && !was {
+                let why = if cfg.raw_layout.is_some() {
+                    "set in wowpad.ini"
+                } else {
+                    "detected"
+                };
+                info!("wowpad: raw pad layout, triggers on the Z axes and X / Y swapped ({why})");
+            }
+            (Some(pad), *layout)
+        }
+        None => (None, Layout::default()),
+    };
     let in_world = script
         .as_ref()
         .is_some_and(|s| s.eval::<bool>("return UIParent ~= nil").unwrap_or(false));
@@ -391,6 +410,7 @@ fn drive(
             &mut keys,
             &mut key_events,
             &mut glue,
+            layout,
         );
         m.glue = glue;
         return;
@@ -425,7 +445,7 @@ fn drive(
         cfg.peek_delay_ms = frame.peek_delay_ms.max(50.0);
     }
 
-    let s = PadState::read(gamepad, cfg.stick_deadzone, cfg.trigger_threshold);
+    let s = PadState::read(gamepad, layout, cfg.stick_deadzone, cfg.trigger_threshold);
     let (window, cursor) = match windows.single_mut() {
         Ok((w, c)) => (Some(w), Some(c)),
         Err(_) => (None, None),
@@ -1134,6 +1154,24 @@ fn update_cursor(m: &mut Mapper, io: &mut Io) {
         m.cursor_hidden = false;
         if !io.frame.looking {
             io.set_cursor_visible(true);
+        }
+    }
+}
+
+/// Name each pad as it connects, for reports.
+fn log_pads(mut events: MessageReader<GamepadConnectionEvent>) {
+    for ev in events.read() {
+        match &ev.connection {
+            GamepadConnection::Connected {
+                name,
+                vendor_id,
+                product_id,
+            } => info!(
+                "wowpad: pad connected: {name} (vendor {:04x}, product {:04x})",
+                vendor_id.unwrap_or(0),
+                product_id.unwrap_or(0)
+            ),
+            GamepadConnection::Disconnected => info!("wowpad: pad disconnected"),
         }
     }
 }
