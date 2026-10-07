@@ -1,0 +1,35 @@
+[package]
+name = "benilla-wowpad"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WowPad on benilla: controller play in the WowPad style, the DLL's job in Rust and the WowPad addon ported to 1.12"
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+default = ["dev", "ragdoll"]
+dev = ["benilla-app/dev"]
+ragdoll = ["benilla-app/ragdoll"]
+
+[dependencies]
+benilla-app = { path = "../benilla-app", default-features = false }
+benilla-ui = { path = "../benilla-ui" }
+benilla-world = { path = "../benilla-world" }
+bevy.workspace = true
+# The WowPad addon, embedded and installed into benilla-config/AddOns.
+include_dir = "0.7"
+
+[build-dependencies]
+benilla-buildstamp = { path = "../benilla-buildstamp" }
+
+[[bin]]
+name = "benilla-wowpad"
+path = "src/main.rs"
+test = false
+
+[dev-dependencies]
+# The addon's files compile under the 1.12 grammar (the workspace's patched lua-src).
+mlua = { version = "0.11", features = ["lua51", "vendored"] }
