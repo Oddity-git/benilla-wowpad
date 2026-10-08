@@ -70,7 +70,7 @@ end
 -- The pointer, drawn: while the pad drives, benilla-wowpad hides the OS cursor (Wayland cannot
 -- move it, and ending camera look would flash it) and moves benilla's pointer itself, so this
 -- draws the game's cursor art there. Hidden during camera look and the peek (the dot is the
--- pointer then).
+-- pointer then) and on the world map (MapCursor.lua draws it there).
 local P = CreateFrame("Frame", "WowPadPointer", UIParent)
 P:SetFrameStrata("TOOLTIP")
 P:SetFrameLevel(100)
@@ -95,7 +95,8 @@ end
 
 local pdriver = CreateFrame("Frame")
 pdriver:SetScript("OnUpdate", function()
-  if not (WP.mode == "controller" and not IsMouselooking() and not WP.peeking) then
+  if not (WP.mode == "controller" and not IsMouselooking() and not WP.peeking)
+     or (WP.MapCursorWanted and WP.MapCursorWanted()) then
     if P:IsShown() then P:Hide() end
     return
   end

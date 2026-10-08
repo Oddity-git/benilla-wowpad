@@ -212,6 +212,7 @@ function Nav.Back()
     end
   end
   if DropDownList1 and DropDownList1:IsVisible() then CloseDropDownMenus() return end
+  if WP.MapBack and WP.MapBack() then return end
   if CursorHasItem() or CursorHasSpell() then ClearCursor() return end
   if WP.Bar and WP.Bar.editing then WP.Bar.SetEditing(false) return end
   CloseMenus()

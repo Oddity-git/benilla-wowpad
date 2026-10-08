@@ -16,3 +16,4 @@ ExtraBars.lua
 Crosshair.lua
 Options.lua
 MinimapButton.lua
+MapCursor.lua
