@@ -10,9 +10,8 @@ publish = false
 workspace = true
 
 [features]
-default = ["dev", "ragdoll"]
+default = ["dev"]
 dev = ["benilla-app/dev"]
-ragdoll = ["benilla-app/ragdoll"]
 
 [dependencies]
 benilla-app = { path = "../benilla-app", default-features = false }
