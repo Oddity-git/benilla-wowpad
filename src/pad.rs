@@ -53,31 +53,39 @@ const BUTTONS: [(GamepadButton, u32); 14] = [
     (GamepadButton::North, Y),
 ];
 
+/// Valve's USB vendor id: Steam's virtual pad.
+const VALVE: u16 = 0x28de;
+
 /// How a pad reports itself. A pad the input library has no mapping for comes through in the raw
 /// Linux layout: Xbox-style X / Y arrive as `North` / `West` (evdev's `BTN_X` is `BTN_NORTH`),
 /// and the triggers as the `LeftZ` / `RightZ` axes instead of `LeftTrigger2` / `RightTrigger2`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Layout {
-    /// The triggers are the Z axes, and X / Y are swapped.
+    /// The triggers are the Z axes.
     pub raw: bool,
+    /// X and Y arrive swapped.
+    pub swap: bool,
     /// The Z axes run -1 (released) to 1 (pulled), rather than 0 to 1.
     pub bipolar: bool,
 }
 
 impl Layout {
     /// Learn from this poll: a Z axis that reports at all marks the raw layout, and a negative
-    /// reading a -1..1 range. `forced` is the ini's `RawLayout` (`None` = detect).
-    pub fn observe(&mut self, pad: &Gamepad, forced: Option<bool>) {
+    /// reading a -1..1 range. X and Y swap with the raw layout, except on Steam's virtual pad
+    /// (Valve's vendor id), whose face buttons arrive in place. `raw` and `swap` are the ini's
+    /// `RawLayout` and `SwapXY` (`None` = detect).
+    pub fn observe(&mut self, pad: &Gamepad, raw: Option<bool>, swap: Option<bool>) {
         let z = [GamepadAxis::LeftZ, GamepadAxis::RightZ].map(|a| pad.get(a));
         if z.iter().flatten().any(|v| *v < -0.05) {
             self.bipolar = true;
         }
-        self.raw = forced.unwrap_or(self.raw || z.iter().any(Option::is_some));
+        self.raw = raw.unwrap_or(self.raw || z.iter().any(Option::is_some));
+        self.swap = swap.unwrap_or(self.raw && pad.vendor_id() != Some(VALVE));
     }
 
     /// The button that is physically `button` on this pad.
     pub fn button(self, button: GamepadButton) -> GamepadButton {
-        match (self.raw, button) {
+        match (self.swap, button) {
             (true, GamepadButton::West) => GamepadButton::North,
             (true, GamepadButton::North) => GamepadButton::West,
             _ => button,
@@ -205,6 +213,7 @@ mod tests {
     fn the_raw_layout_swaps_x_and_y_and_reads_bipolar_z() {
         let raw = Layout {
             raw: true,
+            swap: true,
             bipolar: true,
         };
         assert_eq!(raw.button(GamepadButton::West), GamepadButton::North);
@@ -218,6 +227,7 @@ mod tests {
         assert_eq!(raw.z(None), 0.0);
         let unipolar = Layout {
             raw: true,
+            swap: true,
             bipolar: false,
         };
         assert_eq!(unipolar.z(Some(0.5)), 0.5);

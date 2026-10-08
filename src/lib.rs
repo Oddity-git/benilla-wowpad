@@ -379,15 +379,14 @@ fn drive(
     let (gamepad, layout) = match pads.iter().next() {
         Some((e, pad)) => {
             let layout = layouts.entry(e).or_default();
-            let was = layout.raw;
-            layout.observe(pad, cfg.raw_layout);
-            if layout.raw && !was {
-                let why = if cfg.raw_layout.is_some() {
-                    "set in wowpad.ini"
-                } else {
-                    "detected"
-                };
-                info!("wowpad: raw pad layout, triggers on the Z axes and X / Y swapped ({why})");
+            let was = *layout;
+            layout.observe(pad, cfg.raw_layout, cfg.swap_xy);
+            if (layout.raw, layout.swap) != (was.raw, was.swap) {
+                info!(
+                    "wowpad: pad layout: triggers on the {} axes, X / Y {}",
+                    if layout.raw { "Z" } else { "trigger" },
+                    if layout.swap { "swapped" } else { "in place" }
+                );
             }
             (Some(pad), *layout)
         }

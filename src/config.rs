@@ -49,6 +49,9 @@ pub struct Config {
     pub back_hold_ms: f64,
     /// [Input] the pad's raw Linux layout (triggers as Z axes, X and Y swapped): `None` = detect.
     pub raw_layout: Option<bool>,
+    /// [Input] swap X and Y: `None` = with the raw layout, except on Steam's virtual pad, whose
+    /// face buttons already arrive in place.
+    pub swap_xy: Option<bool>,
 }
 
 impl Default for Config {
@@ -76,6 +79,7 @@ impl Default for Config {
             mouse_travel: 40.0,
             back_hold_ms: 400.0,
             raw_layout: None,
+            swap_xy: None,
         }
     }
 }
@@ -150,17 +154,21 @@ impl Config {
                 ("click", "releaseat") => set(&mut c.click_release_at, num, 0.0, 1.0),
                 ("mode", "mousetravel") => set(&mut c.mouse_travel, num, 0.0, 10000.0),
                 ("mode", "backholdms") => set_ms(&mut c.back_hold_ms, num, 5000.0),
-                ("input", "rawlayout") => {
-                    c.raw_layout = match value.to_ascii_lowercase().as_str() {
-                        "on" | "1" | "true" | "yes" => Some(true),
-                        "off" | "0" | "false" | "no" => Some(false),
-                        _ => None,
-                    }
-                }
+                ("input", "rawlayout") => c.raw_layout = switch(value),
+                ("input", "swapxy") => c.swap_xy = switch(value),
                 _ => {}
             }
         }
         c
+    }
+}
+
+/// `on` / `off` / anything else (`auto`) as `Some(true)` / `Some(false)` / `None`.
+fn switch(value: &str) -> Option<bool> {
+    match value.to_ascii_lowercase().as_str() {
+        "on" | "1" | "true" | "yes" => Some(true),
+        "off" | "0" | "false" | "no" => Some(false),
+        _ => None,
     }
 }
 
