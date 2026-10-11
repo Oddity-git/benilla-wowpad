@@ -136,16 +136,23 @@ function Nav.StartCompare()
     return false
   end
   -- One plate per worn candidate (rings, trinkets and dual-wield show two), to the left of the
-  -- item tooltip. A plate with no lines (its template still arriving) stays hidden, never blank.
+  -- item tooltip, top-aligned with it. A plate with no lines (its template still arriving) stays
+  -- hidden, never blank.
   local n, anchor = 0, GameTooltip
   for i = 1, table.getn(slots) do
     if n < 2 and GetInventoryItemLink("player", slots[i]) then
       local tt = Plate(n + 1)
       if tt then
-        tt:SetOwner(anchor, "ANCHOR_LEFT")
+        tt:SetOwner(GameTooltip, "ANCHOR_NONE")
         tt:SetInventoryItem("player", slots[i])
-        if tt:NumLines() > 0 then
+        local lines = tt:NumLines()
+        if WowPadDB and WowPadDB.debug then
+          WP.Print("compare plate " .. (n + 1) .. " slot " .. slots[i] .. ": lines " .. lines)
+        end
+        if lines > 0 then
           tt:Show()
+          tt:ClearAllPoints()
+          tt:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -4, 0)
           anchor = tt
           n = n + 1
         else
