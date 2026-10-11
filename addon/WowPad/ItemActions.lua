@@ -136,23 +136,24 @@ function Nav.StartCompare()
     return false
   end
   -- One plate per worn candidate (rings, trinkets and dual-wield show two), to the left of the
-  -- item tooltip, top-aligned with it. A plate with no lines (its template still arriving) stays
-  -- hidden, never blank.
+  -- item tooltip, top-aligned with it. Anchor before content so the layout includes the final
+  -- points; a plate with no lines stays hidden, never blank.
   local n, anchor = 0, GameTooltip
   for i = 1, table.getn(slots) do
     if n < 2 and GetInventoryItemLink("player", slots[i]) then
       local tt = Plate(n + 1)
       if tt then
         tt:SetOwner(GameTooltip, "ANCHOR_NONE")
+        tt:ClearAllPoints()
+        tt:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -4, 0)
         tt:SetInventoryItem("player", slots[i])
         local lines = tt:NumLines()
         if WowPadDB and WowPadDB.debug then
           WP.Print("compare plate " .. (n + 1) .. " slot " .. slots[i] .. ": lines " .. lines)
         end
         if lines > 0 then
+          tt:SetAlpha(1)
           tt:Show()
-          tt:ClearAllPoints()
-          tt:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -4, 0)
           anchor = tt
           n = n + 1
         else
@@ -188,6 +189,8 @@ function Nav.CompareDown()
   Nav.compare.since = GetTime()
   Nav.compare.armed = false
   Nav.compare.lastTry = 0
+  Nav.compare.confirms = 0
+  Nav.compare.confirmAt = 0
 end
 function Nav.CompareUp()
   local c = Nav.compare
@@ -201,7 +204,8 @@ function Nav.CompareUp()
   end
 end
 
--- Retry while held, so an item whose template arrives late still compares.
+-- Retry while held (so a template that arrives late still compares), then re-assert the plate a
+-- couple of times: benilla sometimes lays a reused tooltip out blank on the first pass.
 local cmpDriver = CreateFrame("Frame")
 cmpDriver:SetScript("OnUpdate", function()
   local c = Nav.compare
@@ -210,8 +214,14 @@ cmpDriver:SetScript("OnUpdate", function()
   if not WP.MenuContext() then
     c.armed = false
     Nav.StopCompare()
-  elseif not Nav.compareShown and (GetTime() - (c.lastTry or 0)) >= 0.2 then
-    c.lastTry = GetTime()
+  elseif not Nav.compareShown then
+    if (GetTime() - (c.lastTry or 0)) >= 0.2 then
+      c.lastTry = GetTime()
+      Nav.StartCompare()
+    end
+  elseif (c.confirms or 0) < 2 and GetTime() >= (c.confirmAt or 0) then
+    c.confirms = (c.confirms or 0) + 1
+    c.confirmAt = GetTime() + 0.15
     Nav.StartCompare()
   end
 end)
