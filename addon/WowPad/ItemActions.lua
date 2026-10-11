@@ -135,27 +135,32 @@ function Nav.StartCompare()
     if WowPadDB and WowPadDB.debug then WP.Print("compare: " .. equipLoc .. " is not equippable") end
     return false
   end
-  -- One plate per worn candidate (rings, trinkets and dual-wield show two), like the vendor.
+  -- One plate per worn candidate (rings, trinkets and dual-wield show two), to the left of the
+  -- item tooltip. A plate with no lines (its template still arriving) stays hidden, never blank.
   local n, anchor = 0, GameTooltip
   for i = 1, table.getn(slots) do
     if n < 2 and GetInventoryItemLink("player", slots[i]) then
       local tt = Plate(n + 1)
       if tt then
-        n = n + 1
-        tt:SetOwner(anchor, "ANCHOR_RIGHT")
+        tt:SetOwner(anchor, "ANCHOR_LEFT")
         tt:SetInventoryItem("player", slots[i])
-        tt:Show()
-        anchor = tt
+        if tt:NumLines() > 0 then
+          tt:Show()
+          anchor = tt
+          n = n + 1
+        else
+          tt:Hide()
+        end
       end
     end
-  end
-  if n == 0 then
-    if WowPadDB and WowPadDB.debug then WP.Print("compare: nothing worn in " .. equipLoc) end
-    return false
   end
   for i = n + 1, 2 do
     local tt = Plate(i)
     if tt and tt:IsShown() then tt:Hide() end
+  end
+  if n == 0 then
+    if WowPadDB and WowPadDB.debug then WP.Print("compare: nothing worn in " .. equipLoc) end
+    return false
   end
   Nav.compareShown = true
   if WowPadDB and WowPadDB.debug then
