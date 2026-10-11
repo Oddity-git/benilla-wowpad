@@ -92,11 +92,16 @@ end
 WP.MenuContext = MenuContext
 
 ---------------------------------------------------------------------------
--- Menu navigation: the D-pad jumps the pointer to the nearest button that way; A clicks it and
--- X right-clicks it (benilla-wowpad presses the mouse), B backs out.
+-- Menu navigation: the D-pad / right stick pick a button (gold box); A clicks it and X
+-- right-clicks it (benilla-wowpad presses the mouse there), B backs out. LB / RB switch windows;
+-- up / down at a list's edge scrolls it. Also the hint line, the blue focus box and the memory.
 ---------------------------------------------------------------------------
-local Nav = {}
+local Nav = { roots = {}, nodes = {}, nodeSet = {}, scrolls = {}, memory = {} }
 WP.Nav = Nav
+
+local function IsFrame(f)
+  return f ~= nil and f.IsVisible ~= nil and type(f.IsVisible) == "function"
+end
 
 local function Inside(f, open)
   local depth = 0
@@ -117,6 +122,228 @@ local function Centre(f)
 end
 WP.Centre = Centre
 
+local function IsBags(root)
+  local n = root and root:GetName()
+  return n ~= nil and string.find(n, "^ContainerFrame") ~= nil
+end
+
+local function Rect(f)
+  local l, b, w, h = f:GetRect()
+  if not l then return nil end
+  local s = f:GetEffectiveScale()
+  return l * s, b * s, (l + w) * s, (b + h) * s
+end
+
+local function CenterIn(n, sf)
+  local l, b, w, h = n:GetRect()
+  local L, B, R, T = Rect(sf)
+  if not l or not L then return false end
+  local s = n:GetEffectiveScale()
+  local x, y = (l + w / 2) * s, (b + h / 2) * s
+  return x >= L - 2 and x <= R + 2 and y >= B - 2 and y <= T + 2
+end
+
+local function AddRoot(roots, seen, f)
+  if IsFrame(f) and not seen[f] and f:IsVisible() then
+    seen[f] = true
+    roots[table.getn(roots) + 1] = f
+  end
+end
+
+local function CollectRoots()
+  local roots, seen = {}, {}
+  for i = 1, table.getn(WP.overlays) do AddRoot(roots, seen, WP.overlays[i]) end
+  for level = (UIDROPDOWNMENU_MAXLEVELS or 2), 1, -1 do
+    AddRoot(roots, seen, getglobal("DropDownList" .. level))
+  end
+  for i = 1, (STATICPOPUP_NUMDIALOGS or 4) do AddRoot(roots, seen, getglobal("StaticPopup" .. i)) end
+  local pops = WP.PopupRoots()
+  for i = 1, table.getn(pops) do AddRoot(roots, seen, pops[i]) end
+  for i = 1, table.getn(WP.WINDOWS) do AddRoot(roots, seen, getglobal(WP.WINDOWS[i])) end
+  for i = 1, table.getn(UISpecialFrames) do AddRoot(roots, seen, getglobal(UISpecialFrames[i])) end
+  return roots
+end
+
+-- The frames a root stands for (all open bags for the bags root).
+local function RootFrames(root)
+  if not IsBags(root) then return { root } end
+  local list = {}
+  for i = 1, (NUM_CONTAINER_FRAMES or 13) do
+    local f = getglobal("ContainerFrame" .. i)
+    if f and f:IsVisible() then list[table.getn(list) + 1] = f end
+  end
+  return list
+end
+
+local NODE_TYPES = { Button = true, CheckButton = true, EditBox = true }
+
+-- Never stops: the money displays (their gold / silver / copper buttons only pick up coins).
+local function Skipped(f)
+  local n = f:GetName()
+  if not n then return false end
+  return string.find(n, "MoneyFrameGoldButton$") ~= nil
+      or string.find(n, "MoneyFrameSilverButton$") ~= nil
+      or string.find(n, "MoneyFrameCopperButton$") ~= nil
+end
+
+local function Usable(f)
+  local t = f:GetObjectType()
+  if not NODE_TYPES[t] then return false end
+  if f.IsMouseEnabled and not f:IsMouseEnabled() then return false end
+  if Skipped(f) then return false end
+  if t ~= "EditBox" and f.IsEnabled and not f:IsEnabled() then return false end
+  local w, h = f:GetWidth(), f:GetHeight()
+  return w ~= nil and h ~= nil and w >= 6 and h >= 6
+end
+
+-- Nodes, plus the visible scroll frames (lists) found on the way. Nodes inside a real scroll
+-- frame that are scrolled out of view are skipped.
+local function Collect(frame, out, depth, scrolls, clip)
+  if depth > 14 then return end
+  local kids = { frame:GetChildren() }
+  for i = 1, table.getn(kids) do
+    local c = kids[i]
+    if c:IsVisible() then
+      if Usable(c) and not (clip and not CenterIn(c, clip)) then out[table.getn(out) + 1] = c end
+      local ot = c.GetObjectType and c:GetObjectType()
+      local isScroll = ot == "ScrollFrame"
+      local isBar = ot == "Slider"
+      if isScroll and scrolls then scrolls[table.getn(scrolls) + 1] = c end
+      local clip2
+      if isScroll then clip2 = c elseif isBar then clip2 = nil else clip2 = clip end
+      Collect(c, out, depth + 1, scrolls, clip2)
+    end
+  end
+end
+
+-- Top-left-most node: highest first, then leftmost.
+local function DefaultNode(nodes)
+  local best, bx, by
+  for i = 1, table.getn(nodes) do
+    local n = nodes[i]
+    local x, y = Centre(n)
+    if x and (not best or y > by + 4 or (math.abs(y - by) <= 4 and x < bx)) then best, bx, by = n, x, y end
+  end
+  return best
+end
+
+-- Nearest node from cur in direction (dx, dy), favouring nodes straight ahead.
+local function Pick(cur, nodes, dx, dy)
+  local cx, cy = Centre(cur)
+  if not cx then return nil end
+  local best, bestScore
+  for i = 1, table.getn(nodes) do
+    local n = nodes[i]
+    if n ~= cur then
+      local x, y = Centre(n)
+      if x then
+        local vx, vy = x - cx, y - cy
+        local primary = vx * dx + vy * dy
+        if primary > 2 then
+          local secondary = math.abs(vx * dy - vy * dx)
+          local score = primary + secondary * 2.5
+          if not bestScore or score < bestScore then best, bestScore = n, score end
+        end
+      end
+    end
+  end
+  return best
+end
+
+local ROUNDED = "Interface\\Tooltips\\UI-Tooltip-Border"
+local hl = CreateFrame("Frame", "WowPadNavHighlight", UIParent)
+hl:SetFrameStrata("FULLSCREEN_DIALOG")
+hl:SetBackdrop({ edgeFile = ROUNDED, edgeSize = 16 })
+hl:SetBackdropBorderColor(1, 0.82, 0.1, 1)
+hl:Hide()
+
+local navFocus = CreateFrame("Frame", "WowPadNavFocus", UIParent)
+navFocus:SetFrameStrata("FULLSCREEN_DIALOG")
+navFocus:SetBackdrop({ edgeFile = ROUNDED, edgeSize = 20 })
+navFocus:SetBackdropBorderColor(0.35, 0.7, 1, 0.7)
+navFocus:Hide()
+
+local hints = CreateFrame("Frame", "WowPadNavHints", UIParent)
+hints:SetFrameStrata("FULLSCREEN_DIALOG")
+hints:SetHeight(28)
+hints:SetClampedToScreen(true)
+hints:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+                    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                    tile = true, tileSize = 16, edgeSize = 12,
+                    insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+hints:SetBackdropColor(0, 0, 0, 0.85)
+hints:Hide()
+local HINT_PAD, HINT_GAP = 10, 4
+local hintLine = WP.NewKeyLine(hints, "GameFontHighlightSmall", 18)
+hintLine:SetPoint("LEFT", hints, "LEFT", HINT_PAD, 0)
+local function LayoutHints(parts) hints:SetWidth(hintLine:SetParts(parts, HINT_GAP) + 2 * HINT_PAD) end
+
+local FRIENDLY = {
+  MerchantFrame = "Vendor", CharacterFrame = "Character", SpellBookFrame = "Spellbook",
+  TalentFrame = "Talents", QuestLogFrame = "Quest Log", WorldMapFrame = "Map",
+  FriendsFrame = "Social", GossipFrame = "Gossip", QuestFrame = "Quest", LootFrame = "Loot",
+  BankFrame = "Bank", MailFrame = "Mail", TradeFrame = "Trade", AuctionFrame = "Auction House",
+  ClassTrainerFrame = "Trainer", TaxiFrame = "Flight Map", GameMenuFrame = "Game Menu",
+  DressUpFrame = "Preview", PetStableFrame = "Stable", InspectFrame = "Inspect",
+  MacroFrame = "Macros", WowPadOptionsFrame = "Options",
+}
+
+local function H(key, text) return { key = key, text = text } end
+
+function Nav.UpdateHints()
+  local root = Nav.root
+  if not root then navFocus:Hide(); hints:Hide(); return end
+  if root == WP.Radial then navFocus:Hide(); hints:Hide(); return end
+  local parts
+  if root == MerchantFrame then
+    parts = { H("A", "Select"), H("X", "Buy"), H("B", "Close") }
+  elseif IsBags(root) then
+    local vendorOpen = MerchantFrame and MerchantFrame:IsShown()
+    parts = { H("A", "Select"), H("X", vendorOpen and "Sell" or "Use"), H("L3", "Item actions"),
+              H("B", "Close") }
+  elseif root == WorldMapFrame then
+    local onPin = Nav.byDpad and Nav.cur and Nav.cur ~= WorldMapButton
+    parts = { H("A", onPin and "Select" or "Zoom In"), H("X", onPin and "Right-click" or "Zoom Out"),
+              H("D-pad", "Pins"), H("B", (GetCurrentMapContinent() or 0) > 0 and "Back" or "Close") }
+  elseif root == QuestLogFrame then
+    parts = { H("A", "Select"), H("X", "Track"), H("B", "Close") }
+  elseif string.find(root:GetName() or "", "^GroupLootFrame") then
+    parts = { H("A", "Roll"), H("B", "Pass") }
+  else
+    parts = { H("A", "Select"), H("B", "Close") }
+  end
+  if table.getn(Nav.roots) > 1 then parts[table.getn(parts) + 1] = H("LB/RB", "Swap window") end
+  LayoutHints(parts)
+
+  -- Bounding box of the focused window (all bags together), in UIParent units.
+  local uiScale = UIParent:GetEffectiveScale()
+  local L, B, R, T
+  local frames = RootFrames(root)
+  for i = 1, table.getn(frames) do
+    local l, b, w, h = frames[i]:GetRect()
+    if l then
+      local k = frames[i]:GetEffectiveScale() / uiScale
+      l, b, w, h = l * k, b * k, w * k, h * k
+      L = L and math.min(L, l) or l
+      B = B and math.min(B, b) or b
+      R = R and math.max(R, l + w) or l + w
+      T = T and math.max(T, b + h) or b + h
+    end
+  end
+  if not L then navFocus:Hide(); hints:Hide(); return end
+  hints:ClearAllPoints()
+  hints:SetPoint("TOP", UIParent, "BOTTOMLEFT", (L + R) / 2, B - 4)
+  hints:Show()
+  if table.getn(Nav.roots) > 1 then
+    navFocus:ClearAllPoints()
+    navFocus:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", L - 6, T + 6)
+    navFocus:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMLEFT", R + 6, B - 6)
+    navFocus:Show()
+  else
+    navFocus:Hide()
+  end
+end
+
 function Nav.Targets()
   local open = WP.OpenWindows()
   local list = {}
@@ -133,21 +360,41 @@ function Nav.Targets()
   return list
 end
 
--- Put the pointer on a frame: benilla-wowpad moves it there on its next frame, given as a
--- fraction of the screen from the bottom left.
-function Nav.Select(f)
-  Nav.cur = f
-  if not f then return end
-  local x, y = Centre(f)
-  if x then Nav.WarpAbs(x, y) end
-end
-
 -- Put the pointer at absolute units (GetCursorPosition's).
 function Nav.WarpAbs(x, y)
   local s = UIParent:GetEffectiveScale()
   local w, h = GetScreenWidth() * s, GetScreenHeight() * s
   if w > 0 and h > 0 then WP.warpX, WP.warpY = x / w, y / h end
   Nav.selectedAt = GetTime()
+end
+
+local function Box(f)
+  hl:ClearAllPoints()
+  hl:SetPoint("TOPLEFT", f, "TOPLEFT", -6, 6)
+  hl:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 6, -6)
+end
+
+-- Show the gold box on a node without moving the pointer (the tick's memory / follow path).
+function Nav.Highlight(f)
+  if f == Nav.cur then
+    if f and not WP.OwnMenu() then Box(f) end
+    return
+  end
+  Nav.cur = f
+  if f and Nav.root then
+    local x, y = Centre(f)
+    Nav.memory[Nav.root] = { node = f, x = x, y = y }
+  end
+  if f and not WP.OwnMenu() then Box(f); hl:Show() else hl:Hide() end
+end
+
+-- Select a node and park the pointer on it: A / X then click there.
+function Nav.Select(f)
+  if f then
+    local x, y = Centre(f)
+    if x then Nav.WarpAbs(x, y) end
+  end
+  Nav.Highlight(f)
 end
 
 -- Our own menus (the wheel, the target menu): A presses the selected button here instead of a
@@ -177,7 +424,8 @@ function Nav.SelectSoon(f)
   selDriver:Show()
 end
 
-function Nav.Move(dir)
+-- Kept for our own menus (the wheel and the target menu): the D-pad walks their buttons.
+local function MoveTargets(dir)
   local x, y = GetCursorPosition()
   local best, bestScore
   local targets = Nav.Targets()
@@ -199,10 +447,192 @@ function Nav.Move(dir)
   if best then Nav.Select(best.frame) end
 end
 
+-- List scrolling: D-pad up / down at the edge of a list scrolls one row.
+local function ScrollBarOf(sf)
+  local n = sf:GetName()
+  local bar = (n and getglobal(n .. "ScrollBar")) or sf.ScrollBar
+  if not bar then
+    local kids = { sf:GetChildren() }
+    for i = 1, table.getn(kids) do
+      local c = kids[i]
+      if c.GetObjectType and c:GetObjectType() == "Slider" then bar = c; break end
+    end
+  end
+  if bar and bar:IsVisible() and bar.GetValue then return bar end
+end
+
+-- The scroll frame the selected node sits in, if the D-pad would leave it.
+local function ListOf(cur, nxt)
+  for i = 1, table.getn(Nav.scrolls) do
+    local sf = Nav.scrolls[i]
+    if CenterIn(cur, sf) and not (nxt and CenterIn(nxt, sf)) then
+      local bar = ScrollBarOf(sf)
+      if bar then return bar, sf end
+    end
+  end
+  return nil
+end
+
+local function TryScroll(cur, nxt, dy)
+  if dy == 0 or not Nav.scrolls then return false end
+  local bar, sf = ListOf(cur, nxt)
+  if not bar then return false end
+  local lo, hi = bar:GetMinMaxValues()
+  local v = bar:GetValue()
+  local step = math.max(cur:GetHeight() or 16, 8)
+  local nv = v - dy * step
+  nv = math.max(lo, math.min(hi, nv))
+  if math.abs(nv - v) <= 0.5 then return false end
+  local x, y = Centre(cur)
+  bar:SetValue(nv)
+  Nav.Refresh()
+  local best, bd
+  for i = 1, table.getn(Nav.nodes) do
+    local n = Nav.nodes[i]
+    local nx, ny = Centre(n)
+    if nx and CenterIn(n, sf) then
+      local d = (nx - x) ^ 2 + (ny - y) ^ 2
+      if not bd or d < bd then best, bd = n, d end
+    end
+  end
+  if best then
+    if best == Nav.cur then Nav.cur = nil end
+    Nav.Select(best)
+  end
+  return true
+end
+
+local DIRS = { DPAD_UP = { 0, 1 }, DPAD_DOWN = { 0, -1 }, DPAD_LEFT = { -1, 0 }, DPAD_RIGHT = { 1, 0 } }
+
+-- The nav layer runs while a window is open in controller mode, out of combat, with no trigger
+-- held and not on one of our own menus.
+function Nav.Active()
+  return WP.mode == "controller" and WP.set <= 0 and AnyWindowOpen() and not InCombat()
+      and not WP.OwnMenu()
+end
+
+function Nav.Move(dir)
+  local d = DIRS[dir]
+  if not d then return end
+  if WP.OwnMenu() then MoveTargets(dir); return end
+  if not Nav.Active() then return end
+  Nav.Refresh()
+  local nxt = Nav.cur and Pick(Nav.cur, Nav.nodes, d[1], d[2])
+  if Nav.cur and TryScroll(Nav.cur, nxt, d[2]) then Nav.byDpad = true return end
+  if nxt then Nav.Select(nxt); Nav.byDpad = true end
+end
+
+-- LB / RB: the next / previous open window.
+function Nav.CycleRoot(step)
+  Nav.Refresh()
+  local n = table.getn(Nav.roots)
+  if n < 2 then return end
+  local idx = 1
+  for i = 1, n do if Nav.roots[i] == Nav.root then idx = i end end
+  idx = math.mod(idx - 1 + step, n) + 1
+  Nav.root = Nav.roots[idx]
+  Nav.cur = nil
+  if hl:IsShown() then hl:Hide() end
+  Nav.byDpad = true
+  Nav.Refresh()
+end
+
+-- Collect the roots, nodes and lists; keep the selection and refresh the boxes and hints.
+function Nav.Refresh()
+  Nav.roots = CollectRoots()
+  local open = {}
+  for i = 1, table.getn(Nav.roots) do open[Nav.roots[i]] = true end
+  for r in pairs(Nav.memory) do if not r:IsVisible() then Nav.memory[r] = nil end end
+  local top = Nav.roots[1]
+  local stillOpen = false
+  for i = 1, table.getn(Nav.roots) do if Nav.roots[i] == Nav.root then stillOpen = true end end
+  if top ~= Nav.lastTop or not stillOpen then
+    -- A new window on top grabs focus, starting on its default button, not wherever the hidden
+    -- pointer happens to be (the crosshair spot).
+    Nav.root = top
+    Nav.byDpad = true
+    if hl:IsShown() then hl:Hide() end
+    Nav.cur = nil
+    Nav.lastMX, Nav.lastMY = GetCursorPosition()
+  end
+  Nav.lastTop = top
+
+  local nodes, scrolls = {}, {}
+  if Nav.root then
+    local frames = RootFrames(Nav.root)
+    for i = 1, table.getn(frames) do Collect(frames[i], nodes, 0, scrolls) end
+  end
+  Nav.nodes, Nav.nodeSet, Nav.scrolls = nodes, {}, scrolls
+  for i = 1, table.getn(nodes) do Nav.nodeSet[nodes[i]] = true end
+
+  -- Follow the pointer when it moves onto a node.
+  local mx, my = GetCursorPosition()
+  if math.abs(mx - (Nav.lastMX or mx)) + math.abs(my - (Nav.lastMY or my)) > 2 then
+    Nav.byDpad = false
+    local mf = GetMouseFocus()
+    if mf and Nav.nodeSet[mf] then Nav.Highlight(mf) end
+  end
+  Nav.lastMX, Nav.lastMY = mx, my
+
+  if not Nav.cur or not Nav.nodeSet[Nav.cur] then
+    -- Back to where this window was: the same node, else the nearest one.
+    local mem = Nav.root and Nav.memory[Nav.root]
+    if mem then
+      local pick = Nav.nodeSet[mem.node] and mem.node
+      if not pick and mem.x then
+        local bd
+        for i = 1, table.getn(nodes) do
+          local x, y = Centre(nodes[i])
+          if x then
+            local dd = (x - mem.x) ^ 2 + (y - mem.y) ^ 2
+            if not bd or dd < bd then pick, bd = nodes[i], dd end
+          end
+        end
+      end
+      if pick then Nav.Select(pick); Nav.UpdateHints(); return end
+    end
+    local pref
+    local rn = Nav.root and Nav.root:GetName()
+    if rn == "WowPadItemActions" then pref = { getglobal("WowPadItemActionsCancel") }
+    elseif rn == "WowPadOptionsFrame" then pref = { getglobal("WowPadOptionsDone") }
+    end
+    local pick
+    for i = 1, table.getn(pref or {}) do
+      local p = pref[i]
+      if p and Nav.nodeSet[p] then pick = p; break end
+    end
+    Nav.Select(pick or DefaultNode(nodes))
+  end
+  Nav.UpdateHints()
+end
+
+-- Ten times a second: refresh while a window is open, else clear the boxes and hints.
+local navElapsed = 0
+local navFrame = CreateFrame("Frame")
+navFrame:SetScript("OnUpdate", function()
+  navElapsed = navElapsed + arg1
+  if navElapsed < 0.1 then return end
+  navElapsed = 0
+  if Nav.Active() then
+    Nav.Refresh()
+  else
+    for r in pairs(Nav.memory) do if not r:IsVisible() then Nav.memory[r] = nil end end
+    if hl:IsShown() then hl:Hide() end
+    navFocus:Hide()
+    hints:Hide()
+    Nav.root = nil
+    Nav.lastTop = nil
+  end
+end)
+
 -- B: back out of the top window (a popup, a dropdown, then every window).
 function Nav.Back()
   if WP.Radial and WP.Radial:IsVisible() then WP.Radial:Hide() return end
   if WP.UnitMenu and WP.UnitMenu:IsVisible() then WP.UnitMenu:Hide() return end
+  for k = 1, table.getn(WP.overlays) do
+    local o = WP.overlays[k]
+    if o:IsVisible() then o:Hide() return end
+  end
   for i = 1, 4 do
     local p = getglobal("StaticPopup" .. i)
     if p and p:IsVisible() then
@@ -256,8 +686,9 @@ local function SlotSignal(i, down)
     local sig = WP.SLOT_SIGNALS[i]
     if i <= 4 then Nav.Move(sig)
     elseif i == 5 and WP.OwnMenu() then Nav.Press()
-    elseif i == 6 then Nav.Back() end
-    -- Elsewhere A and X are mouse clicks, pressed by benilla-wowpad; Y has nothing yet.
+    elseif i == 6 then Nav.Back()
+    elseif i == 8 and Nav.Preview then Nav.Preview() end
+    -- Elsewhere A and X are mouse clicks, pressed by benilla-wowpad; Y previews the item.
     return
   end
   if set == 0 and i >= 5 then FixedSlot(i, down) return end
@@ -285,7 +716,10 @@ end
 
 local function Bumper(which)
   if WP.RadialBumper and WP.RadialBumper(which) then return end
-  if MenuContext() then return end
+  if MenuContext() then
+    if WP.Nav then WP.Nav.CycleRoot(which == "LB" and -1 or 1) end
+    return
+  end
   local swap = WowPadDB and WowPadDB.swapBumpers == true
   local friendly = (which == "LB") ~= swap
   if friendly then
@@ -458,7 +892,13 @@ local ON_DOWN = {
   ZOOM_OFF        = function() zoomHint:Hide() end,
   CAM_IDLE        = CamIdle,
   CAM_ACTIVE      = CamActive,
-  L3              = function() if not MenuContext() then ToggleAutoRun() end end,
+  L3              = function()
+    if MenuContext() then
+      if WP.OpenItemActions then WP.OpenItemActions() end
+    else
+      ToggleAutoRun()
+    end
+  end,
   LB              = function() Bumper("LB") end,
   RB              = function() Bumper("RB") end,
   LB_FLICK_DOWN   = function() Flick("LB", "DOWN") end,
@@ -603,6 +1043,10 @@ SlashCmdList["WOWPAD"] = function(msg)
     Print("Crosshair peek (tooltips when the right stick rests): " .. (WowPadDB.peek and "on" or "off"))
   elseif cmd == "blizz" then
     if WP.ToggleBlizzBars then WP.ToggleBlizzBars() end
+  elseif cmd == "castbar" then
+    WowPadDB.castBar = not (WowPadDB.castBar ~= false)
+    if WP.Extra then WP.Extra.ApplyShown() end
+    Print("Cast bar: " .. ((WowPadDB.castBar ~= false) and "on" or "off"))
   elseif cmd == "options" or cmd == "o" then
     if WP.OpenOptions then WP.OpenOptions() end
   elseif cmd == "edit" then
@@ -648,7 +1092,7 @@ SlashCmdList["WOWPAD"] = function(msg)
   else
     Print(string.format("mode=%s set=%s context=%s pointer=%s", WP.mode, tostring(WP.set),
       tostring(WP.context), tostring(WP.pointer)))
-    Print("/wp options | edit | bar | lite | blizz | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
+    Print("/wp options | edit | bar | lite | blizz | castbar | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
           .. " | invert | smooth | walk | swap | healer | ring <set_slot|off> | xattack | xbox | ps | status | debug")
   end
 end

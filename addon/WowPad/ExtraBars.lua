@@ -309,9 +309,182 @@ end
 ---------------------------------------------------------------------------
 -- Shown with Blizzard's bars hidden, and everywhere in edit mode
 ---------------------------------------------------------------------------
+-----------------------------------------------------------------------------
+-- Cast bar: WowPad's own player cast / channel bar (game textures only), in a movable holder.
+-- Blizzard's fixed one is switched off while ours is on (WonderPadDB.castBar, /wp castbar).
+--
+-- benilla fires the 1.12 cast events: SPELLCAST_START(name, ms), SPELLCAST_CHANNEL_START(ms, name),
+-- SPELLCAST_DELAYED(ms), SPELLCAST_CHANNEL_UPDATE(ms), and argless SPELLCAST_STOP / FAILED /
+-- INTERRUPTED / CHANNEL_STOP. There is no UnitCastingInfo, so times come from GetTime().
+-----------------------------------------------------------------------------
+local castHolder, castBar
+local blizzCastOff = false
+local CAST_W, CAST_H = 195, 13
+local COLOR_CAST, COLOR_CHANNEL, COLOR_FAIL, COLOR_DONE = { 1, 0.7, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { 0, 1, 0 }
+local CAST_EVENTS = { "SPELLCAST_START", "SPELLCAST_STOP", "SPELLCAST_FAILED",
+  "SPELLCAST_INTERRUPTED", "SPELLCAST_DELAYED", "SPELLCAST_CHANNEL_START",
+  "SPELLCAST_CHANNEL_UPDATE", "SPELLCAST_CHANNEL_STOP", "PLAYER_ENTERING_WORLD" }
+
+local function CastColor(c) castBar:SetStatusBarColor(c[1], c[2], c[3]) end
+
+local function CastFadeOut()
+  castBar.casting, castBar.channeling = nil, nil
+  castBar.spark:Hide()
+  castBar.fading = true
+end
+
+local function CastBegin(channel, name, dur)
+  if not dur or dur <= 0 then return end
+  castBar.startT, castBar.dur = GetTime(), dur
+  castBar.casting, castBar.channeling, castBar.fading = not channel, channel, nil
+  CastColor(channel and COLOR_CHANNEL or COLOR_CAST)
+  castBar.text:SetText((name and name ~= "") and name or "")
+  castBar:SetMinMaxValues(0, dur)
+  castBar:SetValue(channel and dur or 0)
+  castBar.flash:Hide()
+  castBar.spark:Show()
+  castBar:SetAlpha(1)
+  castBar:Show()
+end
+
+local function CastEvent()
+  local ev = event
+  if ev == "PLAYER_ENTERING_WORLD" then
+    if not (castBar.casting or castBar.channeling) then castBar:Hide() end
+  elseif ev == "SPELLCAST_START" then
+    CastBegin(false, arg1, (arg2 or 0) / 1000)
+  elseif ev == "SPELLCAST_CHANNEL_START" then
+    CastBegin(true, arg2, (arg1 or 0) / 1000)
+  elseif ev == "SPELLCAST_DELAYED" then
+    if castBar.casting then
+      castBar.dur = castBar.dur + (arg1 or 0) / 1000
+      castBar:SetMinMaxValues(0, castBar.dur)
+    end
+  elseif ev == "SPELLCAST_CHANNEL_UPDATE" then
+    if castBar.channeling then
+      castBar.startT, castBar.dur = GetTime(), (arg1 or 0) / 1000
+      castBar:SetMinMaxValues(0, castBar.dur)
+    end
+  elseif ev == "SPELLCAST_STOP" then
+    if castBar.casting or castBar.channeling then
+      local _, max = castBar:GetMinMaxValues()
+      castBar:SetValue(castBar.casting and max or 0)
+      CastColor(COLOR_DONE)
+      castBar.flash:Show()
+      CastFadeOut()
+    end
+  elseif ev == "SPELLCAST_CHANNEL_STOP" then
+    if castBar.casting or castBar.channeling then
+      castBar:SetValue(0)
+      CastColor(COLOR_DONE)
+      castBar.flash:Show()
+      CastFadeOut()
+    end
+  elseif ev == "SPELLCAST_FAILED" or ev == "SPELLCAST_INTERRUPTED" then
+    if castBar.casting or castBar.channeling or castBar:IsShown() then
+      local _, max = castBar:GetMinMaxValues()
+      castBar:SetValue(max)
+      CastColor(COLOR_FAIL)
+      castBar.text:SetText(ev == "SPELLCAST_FAILED" and (FAILED or "Failed") or (INTERRUPTED or "Interrupted"))
+      castBar.timer:SetText("")
+      CastFadeOut()
+    end
+  end
+end
+
+local function CastUpdate()
+  local self = this
+  local now = GetTime()
+  if self.casting or self.channeling then
+    local dur = self.dur
+    local v = self.casting and (now - self.startT) or (self.startT + dur - now)
+    if (self.casting and v >= dur) or (self.channeling and v <= 0) then
+      v = self.casting and dur or 0
+    end
+    if v < 0 then v = 0 end
+    self:SetValue(v)
+    local left = self.casting and (dur - v) or v
+    self.timer:SetText(string.format("%.1f", math.max(left, 0)))
+    local pos = dur > 0 and (v / dur) or 0
+    self.spark:SetPoint("CENTER", self, "LEFT", pos * CAST_W, 2)
+  elseif self.fading then
+    local a = self:GetAlpha() - arg1 * 2
+    if a <= 0 then self.fading = nil; self:Hide(); self:SetAlpha(1) else self:SetAlpha(a) end
+  end
+end
+
+local function BuildCast()
+  castHolder = MakeHolder("WowPadCastHolder", "cast", 240, 32, { "BOTTOM", UIParent, "BOTTOM", 0, 190 })
+  castBar = CreateFrame("StatusBar", "WowPadCastBar", castHolder)
+  castBar:SetWidth(CAST_W)
+  castBar:SetHeight(CAST_H)
+  castBar:SetPoint("CENTER", castHolder, "CENTER", 10, 0)
+  castBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+  castBar:SetMinMaxValues(0, 1)
+  local bg = castBar:CreateTexture(nil, "BACKGROUND")
+  bg:SetTexture(0, 0, 0, 0.5)
+  bg:SetAllPoints(castBar)
+  local border = castBar:CreateTexture(nil, "ARTWORK")
+  border:SetTexture("Interface\\CastingBar\\UI-CastingBar-Border")
+  border:SetWidth(256)
+  border:SetHeight(64)
+  border:SetPoint("TOP", castBar, "TOP", 0, 28)
+  castBar.flash = castBar:CreateTexture(nil, "OVERLAY")
+  castBar.flash:SetTexture("Interface\\CastingBar\\UI-CastingBar-Flash")
+  castBar.flash:SetBlendMode("ADD")
+  castBar.flash:SetWidth(256)
+  castBar.flash:SetHeight(64)
+  castBar.flash:SetPoint("TOP", castBar, "TOP", 0, 28)
+  castBar.flash:Hide()
+  castBar.spark = castBar:CreateTexture(nil, "OVERLAY")
+  castBar.spark:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
+  castBar.spark:SetBlendMode("ADD")
+  castBar.spark:SetWidth(32)
+  castBar.spark:SetHeight(32)
+  castBar.text = castBar:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  castBar.text:SetPoint("TOP", castBar, "TOP", 0, 5)
+  castBar.text:SetWidth(185)
+  castBar.text:SetHeight(16)
+  castBar.timer = castBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  castBar.timer:SetPoint("LEFT", castBar, "RIGHT", 6, 1)
+  castBar:SetScript("OnEvent", CastEvent)
+  castBar:SetScript("OnUpdate", CastUpdate)
+  castBar:Hide()
+  MakeMover(castHolder, "Cast bar")
+  ApplyPos(castHolder)
+end
+
+local function CastOn() return not (WowPadDB and WowPadDB.castBar == false) end
+
+local function SetCast(on)
+  if not castBar then return end
+  if on then
+    for i = 1, table.getn(CAST_EVENTS) do castBar:RegisterEvent(CAST_EVENTS[i]) end
+    castHolder:Show()
+    if CastingBarFrame and not blizzCastOff then
+      CastingBarFrame:UnregisterAllEvents()
+      CastingBarFrame:Hide()
+      blizzCastOff = true
+    end
+  else
+    castBar:UnregisterAllEvents()
+    castBar:Hide()
+    castHolder:Hide()
+    if CastingBarFrame and blizzCastOff then
+      -- Give Blizzard's bar its events back (we only unregistered events; its OnEvent script and
+      -- frame the reference defines stay intact).
+      for i = 1, table.getn(CAST_EVENTS) do
+        if CAST_EVENTS[i] ~= "PLAYER_ENTERING_WORLD" then CastingBarFrame:RegisterEvent(CAST_EVENTS[i]) end
+      end
+      blizzCastOff = false
+    end
+  end
+end
+
 function Extra.ApplyShown()
   Extra.UpdateXP()
   Extra.UpdatePet()
+  SetCast(CastOn())
 end
 
 function Extra.SetEditing(on)
@@ -319,12 +492,28 @@ function Extra.SetEditing(on)
   for k = 1, table.getn(movers) do
     if editing then movers[k]:Show() else movers[k]:Hide() end
   end
+  -- A preview bar so the cast bar can be placed even when nothing is being cast.
+  if castBar and CastOn() and not (castBar.casting or castBar.channeling) then
+    if editing then
+      castBar:SetMinMaxValues(0, 1)
+      castBar:SetValue(0.6)
+      CastColor(COLOR_CAST)
+      castBar.text:SetText("Cast bar")
+      castBar.timer:SetText("1.2")
+      castBar.fading = nil
+      castBar:SetAlpha(1)
+      castBar:Show()
+    else
+      castBar:Hide()
+    end
+  end
   Extra.ApplyShown()
 end
 
 table.insert(WP.setupHooks, function()
   BuildXP()
   BuildPet()
+  BuildCast()
   Extra.ApplyShown()
 end)
 

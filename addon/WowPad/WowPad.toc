@@ -7,6 +7,7 @@
 Signals.lua
 Glyphs.lua
 Core.lua
+ItemActions.lua
 Snap.lua
 UnitMenu.lua
 ActionBar.lua
