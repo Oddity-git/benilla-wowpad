@@ -54,6 +54,9 @@ driver:SetScript("OnUpdate", function()
     if not ownTooltip or name ~= lastName or not GameTooltip:IsVisible() then
       GameTooltip_SetDefaultAnchor(GameTooltip, UIParent)
       GameTooltip:SetUnit("mouseover")
+      -- Show() after the owner is set, so addons that override GameTooltip.Show
+      -- (Questie's quest-objective lines) run just as they do under the mouse.
+      GameTooltip:Show()
       ownTooltip, lastName = true, name
     end
   else

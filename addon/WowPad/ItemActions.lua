@@ -101,27 +101,46 @@ cmp:Hide()
 local function CompareOn() return not (WowPadDB and WowPadDB.compare == false) end
 WP.CompareOn = CompareOn
 
--- The worn item in the same slot, beside the bag tooltip.
+-- The worn item in the same slot, beside the bag tooltip. Returns true when it showed.
 function Nav.StartCompare()
-  if not CompareOn() then return end
-  if not GameTooltip:IsShown() then return end
+  if not CompareOn() then return false end
   local link = Nav.FocusedItem()
-  if not link then return end
+  if not link then
+    if WowPadDB and WowPadDB.debug then WP.Print("compare: no item selected") end
+    return false
+  end
   local _, _, _, _, _, _, _, equipLoc = GetItemInfo(link)
-  local slots = equipLoc and CMP_SLOTS[equipLoc]
-  if not slots then return end
+  if not equipLoc or equipLoc == "" then
+    if WowPadDB and WowPadDB.debug then WP.Print("compare: item not cached yet") end
+    return false
+  end
+  local slots = CMP_SLOTS[equipLoc]
+  if not slots then
+    if WowPadDB and WowPadDB.debug then WP.Print("compare: " .. equipLoc .. " is not equippable") end
+    return false
+  end
   local slot
   for i = 1, table.getn(slots) do
     if GetInventoryItemLink("player", slots[i]) then slot = slots[i]; break end
   end
-  if not slot then return end
+  if not slot then
+    if WowPadDB and WowPadDB.debug then WP.Print("compare: nothing worn in " .. equipLoc) end
+    return false
+  end
+  -- Owner first: a Lua GameTooltip:Show() with no owner hides the plate.
+  if GameTooltip_SetDefaultAnchor then GameTooltip_SetDefaultAnchor(cmp, UIParent) end
   cmp:SetInventoryItem("player", slot)
   cmp:Show()
   cmp:ClearAllPoints()
-  cmp:SetPoint("TOPLEFT", GameTooltip, "TOPRIGHT", 0, -10)
-  if WowPadDB and WowPadDB.debug then
-    WP.Print("compare: " .. tostring(equipLoc) .. " -> slot " .. slot)
+  if GameTooltip:IsShown() then
+    cmp:SetPoint("TOPLEFT", GameTooltip, "TOPRIGHT", 0, -10)
+  else
+    cmp:SetPoint("CENTER", UIParent, "CENTER", 300, 0)
   end
+  if WowPadDB and WowPadDB.debug then
+    WP.Print("compare: " .. equipLoc .. " -> slot " .. slot)
+  end
+  return true
 end
 
 function Nav.StopCompare()
@@ -135,6 +154,7 @@ function Nav.CompareDown()
   Nav.compare.held = true
   Nav.compare.since = GetTime()
   Nav.compare.armed = false
+  Nav.compare.lastTry = 0
 end
 function Nav.CompareUp()
   local c = Nav.compare
@@ -148,16 +168,18 @@ function Nav.CompareUp()
   end
 end
 
+-- Retry while held, so an item whose template arrives late still compares.
 local cmpDriver = CreateFrame("Frame")
 cmpDriver:SetScript("OnUpdate", function()
   local c = Nav.compare
-  if c.held and not c.armed and (GetTime() - c.since) >= c.hold then
-    c.armed = true
-    Nav.StartCompare()
-  end
-  if c.armed and (not WP.MenuContext() or not GameTooltip:IsShown()) then
+  if c.held and (GetTime() - c.since) >= c.hold then c.armed = true end
+  if not c.armed then return end
+  if not WP.MenuContext() then
     c.armed = false
     Nav.StopCompare()
+  elseif not cmp:IsShown() and (GetTime() - (c.lastTry or 0)) >= 0.2 then
+    c.lastTry = GetTime()
+    Nav.StartCompare()
   end
 end)
 
