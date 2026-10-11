@@ -683,13 +683,21 @@ local function SlotSignal(i, down)
     return
   end
   if set == 0 and MenuContext() then
+    if i == 8 then
+      -- Y: tap previews, hold compares (ItemActions.lua).
+      if down then
+        if Nav.CompareDown then Nav.CompareDown() end
+      else
+        if Nav.CompareUp then Nav.CompareUp() end
+      end
+      return
+    end
     if not down then return end
     local sig = WP.SLOT_SIGNALS[i]
     if i <= 4 then Nav.Move(sig)
     elseif i == 5 and WP.OwnMenu() then Nav.Press()
-    elseif i == 6 then Nav.Back()
-    elseif i == 8 and Nav.Preview then Nav.Preview() end
-    -- Elsewhere A and X are mouse clicks, pressed by benilla-wowpad; Y previews the item.
+    elseif i == 6 then Nav.Back() end
+    -- Elsewhere A and X are mouse clicks, pressed by benilla-wowpad.
     return
   end
   if set == 0 and i >= 5 then FixedSlot(i, down) return end
@@ -1048,6 +1056,9 @@ SlashCmdList["WOWPAD"] = function(msg)
     WowPadDB.castBar = not (WowPadDB.castBar ~= false)
     if WP.Extra then WP.Extra.ApplyShown() end
     Print("Cast bar: " .. ((WowPadDB.castBar ~= false) and "on" or "off"))
+  elseif cmd == "compare" then
+    WowPadDB.compare = not (WowPadDB.compare ~= false)
+    Print("Compare (hold Y in a menu): " .. ((WowPadDB.compare ~= false) and "on" or "off"))
   elseif cmd == "options" or cmd == "o" then
     if WP.OpenOptions then WP.OpenOptions() end
   elseif cmd == "edit" then
@@ -1093,7 +1104,7 @@ SlashCmdList["WOWPAD"] = function(msg)
   else
     Print(string.format("mode=%s set=%s context=%s pointer=%s", WP.mode, tostring(WP.set),
       tostring(WP.context), tostring(WP.pointer)))
-    Print("/wp options | edit | bar | lite | blizz | castbar | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
+    Print("/wp options | edit | bar | lite | blizz | castbar | compare | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
           .. " | invert | smooth | walk | swap | healer | ring <set_slot|off> | xattack | xbox | ps | status | debug")
   end
 end

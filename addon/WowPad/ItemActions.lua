@@ -78,6 +78,89 @@ function Nav.Preview()
   end
 end
 
+-----------------------------------------------------------------------------
+-- Compare (built): 1.12 has no hover compare, so Y held shows the item you wear in the same slot
+-- beside the tooltip. Our own tooltip frame, so the vendor's ShoppingTooltip1/2 stay untouched.
+-----------------------------------------------------------------------------
+-- itemEquipLoc (GetItemInfo #8) -> the inventory slots it may occupy (0 = ammo, 1 = head, ...
+-- 11/12 fingers, 13/14 trinkets, 16/17 weapons, 18 ranged, 19 tabard).
+local CMP_SLOTS = {
+  INVTYPE_HEAD = { 1 }, INVTYPE_NECK = { 2 }, INVTYPE_SHOULDER = { 3 }, INVTYPE_BODY = { 4 },
+  INVTYPE_CHEST = { 5 }, INVTYPE_ROBE = { 5 }, INVTYPE_WAIST = { 6 }, INVTYPE_LEGS = { 7 },
+  INVTYPE_FEET = { 8 }, INVTYPE_WRIST = { 9 }, INVTYPE_HAND = { 10 },
+  INVTYPE_FINGER = { 11, 12 }, INVTYPE_TRINKET = { 13, 14 }, INVTYPE_CLOAK = { 15 },
+  INVTYPE_WEAPON = { 16, 17 }, INVTYPE_2HWEAPON = { 16 }, INVTYPE_WEAPONMAINHAND = { 16 },
+  INVTYPE_WEAPONOFFHAND = { 17 }, INVTYPE_SHIELD = { 17 }, INVTYPE_HOLDABLE = { 17 },
+  INVTYPE_RANGED = { 18 }, INVTYPE_RANGEDRIGHT = { 18 }, INVTYPE_THROWN = { 18 },
+  INVTYPE_RELIC = { 18 }, INVTYPE_TABARD = { 19 },
+}
+
+local cmp = CreateFrame("GameTooltip", "WowPadCompareTooltip", UIParent, "GameTooltipTemplate")
+cmp:Hide()
+
+local function CompareOn() return not (WowPadDB and WowPadDB.compare == false) end
+WP.CompareOn = CompareOn
+
+-- The worn item in the same slot, beside the bag tooltip.
+function Nav.StartCompare()
+  if not CompareOn() then return end
+  if not GameTooltip:IsShown() then return end
+  local link = Nav.FocusedItem()
+  if not link then return end
+  local _, _, _, _, _, _, _, equipLoc = GetItemInfo(link)
+  local slots = equipLoc and CMP_SLOTS[equipLoc]
+  if not slots then return end
+  local slot
+  for i = 1, table.getn(slots) do
+    if GetInventoryItemLink("player", slots[i]) then slot = slots[i]; break end
+  end
+  if not slot then return end
+  cmp:SetInventoryItem("player", slot)
+  cmp:Show()
+  cmp:ClearAllPoints()
+  cmp:SetPoint("TOPLEFT", GameTooltip, "TOPRIGHT", 0, -10)
+  if WowPadDB and WowPadDB.debug then
+    WP.Print("compare: " .. tostring(equipLoc) .. " -> slot " .. slot)
+  end
+end
+
+function Nav.StopCompare()
+  if cmp:IsShown() then cmp:Hide() end
+end
+
+-- Y: tap previews; hold the same button past `hold` compares.
+Nav.compare = { held = false, since = 0, armed = false, hold = 0.25 }
+function Nav.CompareDown()
+  if not CompareOn() then Nav.Preview() return end
+  Nav.compare.held = true
+  Nav.compare.since = GetTime()
+  Nav.compare.armed = false
+end
+function Nav.CompareUp()
+  local c = Nav.compare
+  if not c.held then return end
+  c.held = false
+  if c.armed then
+    c.armed = false
+    Nav.StopCompare()
+  else
+    Nav.Preview()
+  end
+end
+
+local cmpDriver = CreateFrame("Frame")
+cmpDriver:SetScript("OnUpdate", function()
+  local c = Nav.compare
+  if c.held and not c.armed and (GetTime() - c.since) >= c.hold then
+    c.armed = true
+    Nav.StartCompare()
+  end
+  if c.armed and (not WP.MenuContext() or not GameTooltip:IsShown()) then
+    c.armed = false
+    Nav.StopCompare()
+  end
+end)
+
 -- Destroy the selected bag item, after a confirmation (Cancel is preselected).
 local destroyPending
 StaticPopupDialogs.WOWPAD_DESTROY = {
