@@ -154,6 +154,12 @@ function Nav.StartCompare()
         if lines > 0 then
           tt:SetAlpha(1)
           tt:Show()
+          if WowPadDB and WowPadDB.debug then
+            local n1 = getglobal((tt:GetName() or "?") .. "TextLeft1")
+            WP.Print("compare plate " .. (n + 1) .. " shown=" .. tostring(tt:IsShown())
+              .. " alpha=" .. tostring(tt:GetAlpha())
+              .. " line1=" .. tostring(n1 and n1:GetText()))
+          end
           anchor = tt
           n = n + 1
         else
