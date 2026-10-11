@@ -34,6 +34,7 @@ local function Place()
 end
 
 local driver = CreateFrame("Frame")
+local lastLines = 0
 driver:SetScript("OnUpdate", function()
   acc = acc + arg1
   if acc < 0.03 then return end
@@ -51,35 +52,33 @@ driver:SetScript("OnUpdate", function()
     elseif UnitIsFriend("player", "mouseover") then dot:SetVertexColor(0.3, 1, 0.3)
     else dot:SetVertexColor(1, 0.85, 0.2) end
     local name = UnitName("mouseover")
-    if not ownTooltip or name ~= lastName or not GameTooltip:IsVisible() then
+    -- Re-apply when the target changes, the plate vanished, or benilla's hover driver rebuilt the
+    -- plate (a late name/creature answer): the rebuild drops the lines addons added, so the base
+    -- line count falls back. The count shrinking is the tell.
+    local lines = GameTooltip:IsShown() and GameTooltip:NumLines() or 0
+    if not ownTooltip or name ~= lastName or not GameTooltip:IsVisible() or lines < lastLines then
       GameTooltip_SetDefaultAnchor(GameTooltip, UIParent)
       GameTooltip:SetUnit("mouseover")
-      -- Show() after the owner is set, so addons that override GameTooltip.Show
-      -- (Questie's quest-objective lines) run just as they do under the mouse.
+      -- Show() runs addons that override GameTooltip.Show (Questie's quest-objective lines),
+      -- exactly as under the mouse; __TT_LineCache is Questie's duplicate guard, cleared so it
+      -- re-adds after the rebuild. The SetUnit above wiped the plate, so clearing adds no
+      -- duplicates.
+      if __TT_LineCache then __TT_LineCache = {} end
       GameTooltip:Show()
       ownTooltip, lastName = true, name
+      lastLines = GameTooltip:NumLines()
+    else
+      lastLines = lines
     end
   else
     dot:SetVertexColor(1, 1, 1)
     HideOurTooltip()
+    lastLines = 0
   end
 end)
 
--- Questie (and other addons) add their tooltip lines from GameTooltip.Show. benilla's hover driver
--- rebuilds the plate when a unit's name or creature info arrives late, which drops those lines, and
--- it does not call Show again. Questie also caches its lines and only clears that cache on OnHide,
--- so it thinks they are still there. Re-run Show after each rebuild while the crosshair is up, so
--- the quest-objective lines come back just as they do under the mouse.
-local qhook = CreateFrame("Frame")
-qhook:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
-qhook:SetScript("OnEvent", function()
-  local on = WowPadDB and WowPadDB.crosshair ~= false and WP.mode == "controller"
-             and not WP.pointer and (IsMouselooking() or WP.peeking)
-  if on and UnitExists("mouseover") and GameTooltip:IsShown() then
-    if __TT_LineCache then __TT_LineCache = {} end   -- Questie's duplicate guard (guarded)
-    GameTooltip:Show()
-  end
-end)
+-- The crosshair driver above re-applies the plate whenever benilla's hover driver rebuilds it
+-- (which drops addon-added lines), so Questie's quest-objective lines survive under the crosshair.
 
 function WP.ToggleCrosshair()
   WowPadDB.crosshair = (WowPadDB.crosshair == false)

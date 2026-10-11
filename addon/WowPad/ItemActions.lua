@@ -95,13 +95,22 @@ local CMP_SLOTS = {
   INVTYPE_RELIC = { 18 }, INVTYPE_TABARD = { 19 },
 }
 
-local cmp = CreateFrame("GameTooltip", "WowPadCompareTooltip", UIParent, "GameTooltipTemplate")
-cmp:Hide()
+-- The stock compare plates (ShoppingTooltip1/2), the same XML tooltips the vendor compare uses --
+-- an addon-created GameTooltip counts lines but draws no text in benilla.
+local function Plate(i) return getglobal("ShoppingTooltip" .. i) end
 
 local function CompareOn() return not (WowPadDB and WowPadDB.compare == false) end
 WP.CompareOn = CompareOn
 
--- The worn item in the same slot, beside the bag tooltip. Returns true when it showed.
+function Nav.HideCompare()
+  Nav.compareShown = false
+  for i = 1, 2 do
+    local tt = Plate(i)
+    if tt and tt:IsShown() then tt:Hide() end
+  end
+end
+
+-- The worn item in the same slot, beside the bag tooltip. Returns true when a plate showed.
 function Nav.StartCompare()
   if not CompareOn() then return false end
   local link = Nav.FocusedItem()
@@ -126,32 +135,37 @@ function Nav.StartCompare()
     if WowPadDB and WowPadDB.debug then WP.Print("compare: " .. equipLoc .. " is not equippable") end
     return false
   end
-  local slot
+  -- One plate per worn candidate (rings, trinkets and dual-wield show two), like the vendor.
+  local n, anchor = 0, GameTooltip
   for i = 1, table.getn(slots) do
-    if GetInventoryItemLink("player", slots[i]) then slot = slots[i]; break end
+    if n < 2 and GetInventoryItemLink("player", slots[i]) then
+      local tt = Plate(n + 1)
+      if tt then
+        n = n + 1
+        tt:SetOwner(anchor, "ANCHOR_RIGHT")
+        tt:SetInventoryItem("player", slots[i])
+        tt:Show()
+        anchor = tt
+      end
+    end
   end
-  if not slot then
+  if n == 0 then
     if WowPadDB and WowPadDB.debug then WP.Print("compare: nothing worn in " .. equipLoc) end
     return false
   end
-  -- Owner first: a Lua GameTooltip:Show() with no owner hides the plate.
-  if GameTooltip_SetDefaultAnchor then GameTooltip_SetDefaultAnchor(cmp, UIParent) end
-  cmp:SetInventoryItem("player", slot)
-  cmp:Show()
-  cmp:ClearAllPoints()
-  if GameTooltip:IsShown() then
-    cmp:SetPoint("TOPLEFT", GameTooltip, "TOPRIGHT", 0, -10)
-  else
-    cmp:SetPoint("CENTER", UIParent, "CENTER", 300, 0)
+  for i = n + 1, 2 do
+    local tt = Plate(i)
+    if tt and tt:IsShown() then tt:Hide() end
   end
+  Nav.compareShown = true
   if WowPadDB and WowPadDB.debug then
-    WP.Print("compare: " .. equipLoc .. " -> slot " .. slot)
+    WP.Print("compare: " .. equipLoc .. " -> " .. n .. " plate(s)")
   end
   return true
 end
 
 function Nav.StopCompare()
-  if cmp:IsShown() then cmp:Hide() end
+  Nav.HideCompare()
 end
 
 -- Y: tap previews; hold the same button past `hold` compares.
@@ -184,7 +198,7 @@ cmpDriver:SetScript("OnUpdate", function()
   if not WP.MenuContext() then
     c.armed = false
     Nav.StopCompare()
-  elseif not cmp:IsShown() and (GetTime() - (c.lastTry or 0)) >= 0.2 then
+  elseif not Nav.compareShown and (GetTime() - (c.lastTry or 0)) >= 0.2 then
     c.lastTry = GetTime()
     Nav.StartCompare()
   end
