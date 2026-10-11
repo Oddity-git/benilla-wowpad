@@ -128,18 +128,18 @@ local function IsBags(root)
 end
 
 local function Rect(f)
-  local l, b, w, h = f:GetRect()
-  if not l then return nil end
+  local l, b = f:GetLeft(), f:GetBottom()
+  if not l or not b then return nil end
   local s = f:GetEffectiveScale()
-  return l * s, b * s, (l + w) * s, (b + h) * s
+  return l * s, b * s, (l + f:GetWidth()) * s, (b + f:GetHeight()) * s
 end
 
 local function CenterIn(n, sf)
-  local l, b, w, h = n:GetRect()
+  local l, b = n:GetLeft(), n:GetBottom()
   local L, B, R, T = Rect(sf)
-  if not l or not L then return false end
+  if not l or not b or not L then return false end
   local s = n:GetEffectiveScale()
-  local x, y = (l + w / 2) * s, (b + h / 2) * s
+  local x, y = (l + n:GetWidth() / 2) * s, (b + n:GetHeight() / 2) * s
   return x >= L - 2 and x <= R + 2 and y >= B - 2 and y <= T + 2
 end
 
@@ -320,8 +320,9 @@ function Nav.UpdateHints()
   local L, B, R, T
   local frames = RootFrames(root)
   for i = 1, table.getn(frames) do
-    local l, b, w, h = frames[i]:GetRect()
-    if l then
+    local l, b = frames[i]:GetLeft(), frames[i]:GetBottom()
+    if l and b then
+      local w, h = frames[i]:GetWidth(), frames[i]:GetHeight()
       local k = frames[i]:GetEffectiveScale() / uiScale
       l, b, w, h = l * k, b * k, w * k, h * k
       L = L and math.min(L, l) or l

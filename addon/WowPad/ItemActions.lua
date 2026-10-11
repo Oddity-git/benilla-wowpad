@@ -30,20 +30,22 @@ end
 function Nav.FocusedItem()
   local n = Nav.cur
   if not n then return end
-  local link
-  if GameTooltip:IsShown() and GameTooltip:IsOwned(n) then
-    local _, l = GameTooltip:GetItem()
-    link = l
-  end
-  if not InBags(n) then return link end
   local p = n.GetParent and n:GetParent()
   local bag = (type(n.GetBag) == "function") and n:GetBag() or (p and p.GetID and p:GetID())
   local slot = n.GetID and n:GetID()
-  if bag and slot then
+  -- A real bag slot: straight from the container, no tooltip needed.
+  if InBags(n) and bag and slot then
     local bl = GetContainerItemLink(bag, slot)
-    if bl and (not link or bl == link) then return bl, bag, slot end
+    if bl then return bl, bag, slot end
   end
-  if link then
+  -- Anything else (vendor, loot, quest reward, character): the tooltip its OnEnter showed.
+  -- benilla's GameTooltip has no GetItem, so only ask when it is there.
+  local link
+  if GameTooltip.GetItem and GameTooltip:IsShown() and GameTooltip:IsOwned(n) then
+    local _, l = GameTooltip:GetItem()
+    link = l
+  end
+  if link and InBags(n) then
     for b = 0, (NUM_BAG_SLOTS or 4) do
       for sl = 1, (GetContainerNumSlots(b) or 0) do
         if GetContainerItemLink(b, sl) == link then return link, b, sl end
