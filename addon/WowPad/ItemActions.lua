@@ -109,7 +109,14 @@ function Nav.StartCompare()
     if WowPadDB and WowPadDB.debug then WP.Print("compare: no item selected") end
     return false
   end
-  local _, _, _, _, _, _, _, equipLoc = GetItemInfo(link)
+  local _, _, idstr = string.find(link, "item:(%d+)")
+  if not idstr then
+    if WowPadDB and WowPadDB.debug then WP.Print("compare: no item id in the link") end
+    return false
+  end
+  -- GetItemInfo takes a plain "item:..." string or a number, not a hyperlink (GetContainerItemLink
+  -- returns a hyperlink, which parses to id 0), so hand it the numeric id.
+  local _, _, _, _, _, _, _, equipLoc = GetItemInfo(tonumber(idstr))
   if not equipLoc or equipLoc == "" then
     if WowPadDB and WowPadDB.debug then WP.Print("compare: item not cached yet") end
     return false

@@ -65,6 +65,22 @@ driver:SetScript("OnUpdate", function()
   end
 end)
 
+-- Questie (and other addons) add their tooltip lines from GameTooltip.Show. benilla's hover driver
+-- rebuilds the plate when a unit's name or creature info arrives late, which drops those lines, and
+-- it does not call Show again. Questie also caches its lines and only clears that cache on OnHide,
+-- so it thinks they are still there. Re-run Show after each rebuild while the crosshair is up, so
+-- the quest-objective lines come back just as they do under the mouse.
+local qhook = CreateFrame("Frame")
+qhook:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
+qhook:SetScript("OnEvent", function()
+  local on = WowPadDB and WowPadDB.crosshair ~= false and WP.mode == "controller"
+             and not WP.pointer and (IsMouselooking() or WP.peeking)
+  if on and UnitExists("mouseover") and GameTooltip:IsShown() then
+    if __TT_LineCache then __TT_LineCache = {} end   -- Questie's duplicate guard (guarded)
+    GameTooltip:Show()
+  end
+end)
+
 function WP.ToggleCrosshair()
   WowPadDB.crosshair = (WowPadDB.crosshair == false)
   WP.Print("Crosshair: " .. (WowPadDB.crosshair and "on" or "off"))
