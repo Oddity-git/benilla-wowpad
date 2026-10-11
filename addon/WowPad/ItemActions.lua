@@ -55,17 +55,27 @@ function Nav.FocusedItem()
   return link
 end
 
--- Can this item be previewed in the dressing room? (armor and weapons, not bags)
-local function Dressable(link)
-  if not link then return false end
-  local loc = select(9, GetItemInfo(link))
-  return loc ~= nil and loc ~= "" and loc ~= "INVTYPE_BAG" and loc ~= "INVTYPE_QUIVER"
-end
-
--- Y: preview the selected item in the dressing room.
+-- Y: preview the selected item in the dressing room. The reference has no fit check, so any item
+-- link is previewed; benilla dresses through the stock DressUpItemLink, or the DressUpModel's
+-- TryOn when that stock function is not loaded.
 function Nav.Preview()
   local link = Nav.FocusedItem()
-  if Dressable(link) and DressUpItemLink then DressUpItemLink(link) end
+  if not link then
+    if WowPadDB and WowPadDB.debug then WP.Print("preview: nothing selected") end
+    return
+  end
+  if DressUpItemLink then
+    DressUpItemLink(link)
+    if WowPadDB and WowPadDB.debug then WP.Print("preview: " .. link) end
+  elseif DressUpModel and DressUpModel.TryOn then
+    local _, _, id = string.find(link, "item:(%d+)")
+    if id then
+      DressUpModel:TryOn(tonumber(id))
+      if WowPadDB and WowPadDB.debug then WP.Print("preview (TryOn): " .. link) end
+    end
+  else
+    WP.Print("Preview is not available on this client.")
+  end
 end
 
 -- Destroy the selected bag item, after a confirmation (Cancel is preselected).
