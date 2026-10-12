@@ -98,6 +98,9 @@ struct Frame {
     menu_nav: bool,
     /// Where navigation put the pointer: screen fractions from the bottom left, once.
     warp: Option<Vec2>,
+    /// The options' "Swap X / Y": flip whatever the layout says, for a pad that still has them
+    /// backwards (phone controller apps and other pads that report the raw layout their own way).
+    swap_xy: bool,
 }
 
 /// The ground-target placement under way: camera look off, then a left click at the crosshair.
@@ -317,6 +320,7 @@ fn read_frame(script: &UiScript) -> Option<Frame> {
             bool,
             Option<f32>,
             Option<f32>,
+            bool,
         ),
         _,
     > = script.eval("if WowPad_Frame then return WowPad_Frame() end");
@@ -337,6 +341,7 @@ fn read_frame(script: &UiScript) -> Option<Frame> {
             menu_nav,
             wx,
             wy,
+            swap_xy,
         )) => Some(Frame {
             looking,
             menu,
@@ -352,6 +357,7 @@ fn read_frame(script: &UiScript) -> Option<Frame> {
             ring_slot: ring,
             menu_nav,
             warp: wx.zip(wy).map(|(x, y)| Vec2::new(x, y)),
+            swap_xy,
         }),
         Ok(_) => None,
         Err(e) => {
@@ -366,6 +372,8 @@ fn drive(
     script: Option<NonSendMut<UiScript>>,
     pads: Query<(Entity, &Gamepad)>,
     mut layouts: Local<HashMap<Entity, Layout>>,
+    mut shown: Local<Option<Layout>>,
+    mut swap_flip: Local<bool>,
     cfg: Res<Config>,
     time: Res<Time>,
     mut motion: ResMut<AccumulatedMouseMotion>,
@@ -376,22 +384,6 @@ fn drive(
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut key_events: MessageWriter<KeyboardInput>,
 ) {
-    let (gamepad, layout) = match pads.iter().next() {
-        Some((e, pad)) => {
-            let layout = layouts.entry(e).or_default();
-            let was = *layout;
-            layout.observe(pad, cfg.raw_layout, cfg.swap_xy);
-            if (layout.raw, layout.swap) != (was.raw, was.swap) {
-                info!(
-                    "wowpad: pad layout: triggers on the {} axes, X / Y {}",
-                    if layout.raw { "Z" } else { "trigger" },
-                    if layout.swap { "swapped" } else { "in place" }
-                );
-            }
-            (Some(pad), *layout)
-        }
-        None => (None, Layout::default()),
-    };
     let in_world = script
         .as_ref()
         .is_some_and(|s| s.eval::<bool>("return UIParent ~= nil").unwrap_or(false));
@@ -399,6 +391,31 @@ fn drive(
         .as_ref()
         .filter(|_| in_world)
         .and_then(|s| read_frame(s));
+    // The options' swap is kept from the last frame the addon answered, so the glue screens
+    // after a logout keep it too.
+    if let Some(f) = frame {
+        *swap_flip = f.swap_xy;
+    }
+    let (gamepad, layout) = match pads.iter().next() {
+        Some((e, pad)) => {
+            let layout = layouts.entry(e).or_default();
+            layout.observe(pad, cfg.raw_layout, cfg.swap_xy);
+            let layout = Layout {
+                swap: layout.swap != *swap_flip,
+                ..*layout
+            };
+            if shown.is_none_or(|was| (layout.raw, layout.swap) != (was.raw, was.swap)) {
+                info!(
+                    "wowpad: pad layout: triggers on the {} axes, X / Y {}",
+                    if layout.raw { "Z" } else { "trigger" },
+                    if layout.swap { "swapped" } else { "in place" }
+                );
+            }
+            *shown = Some(layout);
+            (Some(pad), layout)
+        }
+        None => (None, Layout::default()),
+    };
     let (Some(script), Some(frame)) = (script.filter(|_| in_world), frame) else {
         // Before the world, or without the addon: the glue screens' keys.
         let mut glue = std::mem::take(&mut m.glue);

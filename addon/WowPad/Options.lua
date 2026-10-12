@@ -187,6 +187,13 @@ Check("WowPadOptHealer", "Healer mode",
 Check("WowPadOptPS", "PlayStation button labels", "Cross / Circle / Square / Triangle instead of A / B / X / Y.",
   R, -146, function() return WP.ButtonStyle() == "ps" end,
   function(v) WP.SetButtonStyle(v and "ps" or "xbox") end)
+-- Some pads still arrive with X and Y in each other's place after the automatic layout check (a
+-- phone used as a controller, pads Linux has no mapping for): this flips them back.
+Check("WowPadOptSwapXY", "Swap X / Y buttons",
+  "Tick this if X does what Y should and Y does what X should. Some controllers (phone controller "
+  .. "apps, pads with no Linux mapping) report the two in each other's place, and WowPad cannot always "
+  .. "tell. The setting is saved, so the pad stays fixed next time.",
+  R, -170, function() return DB().wpSwapXY == true end, Put("wpSwapXY"))
 
 -- The utility ring's button: none, a D-pad button of the default set, or any button of LT, RT, LT+RT.
 local RING = { 0, 1, 2, 3, 4 }
@@ -196,33 +203,33 @@ local function RingName(v)
   if not v or v <= 0 then return "None" end
   return SETS[math.floor(v / 10)] .. " " .. WP.SLOT_LABELS[math.mod(v, 10)]
 end
-Cycler("WowPadOptRing", "Utility ring", R, -172, RING, RingName,
+Cycler("WowPadOptRing", "Utility ring", R, -196, RING, RingName,
   function() return tonumber(DB().wpRingSlot) or 0 end,
   function(v)
     DB().wpRingSlot = v
     if WP.Bar then WP.Bar.UpdateAll() end
   end)
 
-Header("Bars", R, -208)
+Header("Bars", R, -232)
 Check("WowPadOptAlways", "Controller bar always visible", "Off: the bar shows only in controller mode.",
-  R, -226, function() return DB().barAlways ~= false end,
+  R, -250, function() return DB().barAlways ~= false end,
   function(v) if (DB().barAlways ~= false) ~= v and WP.Bar then WP.Bar.ToggleAlways() end end)
 Check("WowPadOptLite", "Lite bar (one set at a time)",
   "One cluster: your default set, and holding LT, RT or both shows that set in its place.",
-  R, -250, function() return DB().barLite == true end,
+  R, -274, function() return DB().barLite == true end,
   function(v) if WP.Bar then WP.Bar.SetLite(v) end end)
 Check("WowPadOptBlizz", "Hide Blizzard action bars",
   "Hides the stock bars and art; WowPad's XP, reputation and pet bars take their place.",
-  R, -274, function() return DB().hideBlizz == true end,
+  R, -298, function() return DB().hideBlizz == true end,
   function(v) if (DB().hideBlizz == true) ~= v then WP.ToggleBlizzBars() end end)
 Check("WowPadOptMinimap", "Minimap button", "Left-click: edit the bar layout. Right-click: these options.",
-  R, -298, function() return not (DB().minimap and DB().minimap.hide) end,
+  R, -322, function() return not (DB().minimap and DB().minimap.hide) end,
   function(v)
     DB().minimap = DB().minimap or {}
     DB().minimap.hide = not v
     if WP.UpdateMinimapButton then WP.UpdateMinimapButton() end
   end)
-Stepper("WowPadOptScale", "Bar size", R, -326,
+Stepper("WowPadOptScale", "Bar size", R, -350,
   { min = 0.4, max = 1.6, step = 0.05, fmt = X,
     get = function() return (WP.Bar and WP.Bar.Pos().scale) or 1 end,
     set = function(v) if WP.Bar then WP.Bar.SetScale(v) end end })
@@ -230,7 +237,7 @@ Stepper("WowPadOptScale", "Bar size", R, -326,
 local edit = CreateFrame("Button", "WowPadOptEdit", F, "UIPanelButtonTemplate")
 edit:SetWidth(150)
 edit:SetHeight(22)
-edit:SetPoint("TOPLEFT", F, "TOPLEFT", R, -358)
+edit:SetPoint("TOPLEFT", F, "TOPLEFT", R, -380)
 edit:SetText("Edit bar layout")
 edit:SetScript("OnClick", function()
   F:Hide()

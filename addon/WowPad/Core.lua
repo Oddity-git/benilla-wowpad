@@ -956,7 +956,8 @@ function WowPad_Frame()
     db.wpWalkRun == true, db.wpCamSmooth == true, db.wpBumperFlick == true,
     tonumber(db.wpRingSlot) or 0,
     MenuContext() and WP.set <= 0 and not WP.OwnMenu() and true or false,
-    wx, wy
+    wx, wy,
+    db.wpSwapXY == true
 end
 
 -- benilla-wowpad: the pad's face style, when it connects.
