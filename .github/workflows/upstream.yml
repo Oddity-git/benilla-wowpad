@@ -10,6 +10,11 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 
+# A newer push replaces a run still going, so pushes in a row don't each spend minutes.
+concurrency:
+  group: newest-benilla
+  cancel-in-progress: true
+
 jobs:
   install:
     runs-on: ubuntu-latest
