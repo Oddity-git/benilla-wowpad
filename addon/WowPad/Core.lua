@@ -293,6 +293,12 @@ local FRIENDLY = {
 
 local function H(key, text) return { key = key, text = text } end
 
+-- A bag addon's window (OneBag, Bagnon, ...): named like a bag, not the stock ContainerFrames.
+local function BagLike(root)
+  local n = string.lower(root:GetName() or "")
+  return string.find(n, "bag") ~= nil or string.find(n, "inventory") ~= nil
+end
+
 function Nav.UpdateHints()
   local root = Nav.root
   if not root then navFocus:Hide(); hints:Hide(); return end
@@ -300,10 +306,11 @@ function Nav.UpdateHints()
   local parts
   if root == MerchantFrame then
     parts = { H("A", "Select"), H("X", "Buy"), H("B", "Close") }
-  elseif IsBags(root) then
+  elseif IsBags(root) or BagLike(root) then
     local vendorOpen = MerchantFrame and MerchantFrame:IsShown()
-    parts = { H("A", "Select"), H("X", vendorOpen and "Sell" or "Use"), H("L3", "Item actions"),
-              H("B", "Close") }
+    parts = { H("A", "Select"), H("X", vendorOpen and "Sell" or "Use"),
+              H("Y", (WP.CompareOn and WP.CompareOn()) and "Preview / hold: Compare" or "Preview"),
+              H("L3", "Item actions"), H("B", "Close") }
   elseif root == WorldMapFrame then
     local onPin = Nav.byDpad and Nav.cur and Nav.cur ~= WorldMapButton
     parts = { H("A", onPin and "Select" or "Zoom In"), H("X", onPin and "Right-click" or "Zoom Out"),
