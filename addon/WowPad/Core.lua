@@ -178,7 +178,8 @@ local function RootFrames(root)
   return list
 end
 
-local NODE_TYPES = { Button = true, CheckButton = true, EditBox = true }
+-- LootButton: the loot window's slots answer their own type, not Button.
+local NODE_TYPES = { Button = true, CheckButton = true, EditBox = true, LootButton = true }
 
 -- Never stops: the money displays (their gold / silver / copper buttons only pick up coins).
 local function Skipped(f)
@@ -366,7 +367,7 @@ function Nav.Targets()
   local f = EnumerateFrames()
   while f do
     local kind = f:GetObjectType()
-    if (kind == "Button" or kind == "CheckButton") and f:IsVisible() and Inside(f, open) then
+    if NODE_TYPES[kind] and kind ~= "EditBox" and f:IsVisible() and Inside(f, open) then
       local w, h = f:GetWidth(), f:GetHeight()
       local x, y = Centre(f)
       if x and w > 4 and h > 4 then table.insert(list, { x = x, y = y, frame = f }) end
@@ -805,6 +806,7 @@ function Nav.Refresh()
     elseif rn == "WowPadFirstTime" then pref = { getglobal("WowPadFirstTimeNext") }
     elseif rn == "WowPadInfo" then pref = { getglobal("WowPadInfoCloseButton") }
     elseif rn == "WorldMapFrame" then pref = { WorldMapButton }   -- the middle of the map
+    elseif rn == "LootFrame" then pref = { LootButton1, LootButton2, LootButton3, LootButton4 }
     elseif rn == "QuestFrame" then pref = QuestStart()
     elseif rn == "GossipFrame" then pref = GossipStart()
     elseif IsBags(Nav.root) or BagLike(Nav.root) then

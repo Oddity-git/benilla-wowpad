@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The loot window's slots can be selected and looted with the pad (it starts on the first one).
 - Windows open on a sensible spot: the map in its middle, quest windows on Accept / Complete or
   the first quest, bags on the first slot.
 - `/wp save` saves your settings without logging out (it reloads the UI).
