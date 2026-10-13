@@ -66,7 +66,7 @@ see the installer below, which sorts that out for you.
 
 ### The easier way (installer)
 
-Not something other forks do: this repository also ships an installer, for anyone who would rather
+This is something I'm trying out, this repository also ships an installer, for anyone who would rather
 not apply patches by hand. It does exactly the steps above. It is a plain text script you can read
 before running, it downloads nothing, needs no admin rights, and only changes the benilla folder
 you pick.
