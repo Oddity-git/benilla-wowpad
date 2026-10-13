@@ -539,14 +539,38 @@ function Nav.Move(dir)
 end
 
 -- LB / RB: the next / previous open window.
+-- A root's horizontal centre on screen (all open bags together for the bags root).
+local function RootCenterX(root)
+  local frames, L, R = RootFrames(root), nil, nil
+  for i = 1, table.getn(frames) do
+    local l, _, r = Rect(frames[i])
+    if l then
+      if not L or l < L then L = l end
+      if not R or r > R then R = r end
+    end
+  end
+  return L and (L + R) / 2 or 0
+end
+
+-- Step to the open window to the right (step 1) or left (-1) of the focused one, by where they
+-- sit on screen. Stops at the last window either way, so the same button never comes back around.
 function Nav.CycleRoot(step)
   Nav.Refresh()
   local n = table.getn(Nav.roots)
   if n < 2 then return end
+  local order = {}
+  for i = 1, n do
+    order[i] = { root = Nav.roots[i], x = RootCenterX(Nav.roots[i]), i = i }
+  end
+  table.sort(order, function(a, b)
+    if a.x ~= b.x then return a.x < b.x end
+    return a.i < b.i
+  end)
   local idx = 1
-  for i = 1, n do if Nav.roots[i] == Nav.root then idx = i end end
-  idx = math.mod(idx - 1 + step + n, n) + 1
-  Nav.root = Nav.roots[idx]
+  for i = 1, n do if order[i].root == Nav.root then idx = i end end
+  idx = idx + step
+  if idx < 1 or idx > n then return end
+  Nav.root = order[idx].root
   Nav.cur = nil
   if hl:IsShown() then hl:Hide() end
   Nav.byDpad = true
