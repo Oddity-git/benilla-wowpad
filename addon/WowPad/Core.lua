@@ -68,8 +68,11 @@ function WP.OpenWindows()
     local o = WP.overlays[i]
     if o:IsVisible() then open[o] = true; any = true end
   end
-  local roots = WP.PopupRoots()
-  for i = 1, table.getn(roots) do open[roots[i]] = true; any = true end
+  -- Out of combat only, as on 3.3.5: a roll popup mid-fight must not take the camera away.
+  if not InCombat() then
+    local roots = WP.PopupRoots()
+    for i = 1, table.getn(roots) do open[roots[i]] = true; any = true end
+  end
   return open, any
 end
 
@@ -312,7 +315,12 @@ function Nav.UpdateHints()
   else
     parts = { H("A", "Select"), H("B", "Close") }
   end
-  if table.getn(Nav.roots) > 1 then parts[table.getn(parts) + 1] = H("LB/RB", "Swap window") end
+  if Nav.HasTabs(root) then
+    parts[table.getn(parts) + 1] = H("LB/RB", "Tabs")
+    if table.getn(Nav.roots) > 1 then parts[table.getn(parts) + 1] = H("LT/RT", "Swap window") end
+  elseif table.getn(Nav.roots) > 1 then
+    parts[table.getn(parts) + 1] = H("LB/RB", "Swap window")
+  end
   LayoutHints(parts)
 
   -- Bounding box of the focused window (all bags together), in UIParent units.
@@ -530,12 +538,136 @@ function Nav.CycleRoot(step)
   if n < 2 then return end
   local idx = 1
   for i = 1, n do if Nav.roots[i] == Nav.root then idx = i end end
-  idx = math.mod(idx - 1 + step, n) + 1
+  idx = math.mod(idx - 1 + step + n, n) + 1
   Nav.root = Nav.roots[idx]
   Nav.cur = nil
   if hl:IsShown() then hl:Hide() end
   Nav.byDpad = true
   Nav.Refresh()
+end
+
+-- Tab buttons of a window (Character, Social, Spellbook, Talents, Auction House...), left to
+-- right; the spellbook's school tabs down its side come first. Hidden tabs are left out.
+local SIDE_TABS = { SpellBookFrame = "SpellBookSkillLineTab" }
+function Nav.Tabs(root)
+  local name = root and root.GetName and root:GetName()
+  local list = {}
+  if not name then return list end
+  local side = SIDE_TABS[name]
+  if side then
+    for i = 1, 12 do
+      local t = getglobal(side .. i)
+      if not IsFrame(t) then break end
+      if t:IsVisible() then list[table.getn(list) + 1] = t end
+    end
+    if table.getn(list) > 1 then
+      table.sort(list, function(a, b) return (a:GetTop() or 0) > (b:GetTop() or 0) end)
+      return list
+    end
+    list = {}
+  end
+  local forms = { "Tab", "TabButton" }
+  for f = 1, 2 do
+    for i = 1, 12 do
+      local t = getglobal(name .. forms[f] .. i)
+      if not IsFrame(t) then break end
+      if t:GetObjectType() == "Button" and t:IsVisible() then list[table.getn(list) + 1] = t end
+    end
+    if table.getn(list) > 0 then break end
+  end
+  table.sort(list, function(a, b) return (a:GetLeft() or 0) < (b:GetLeft() or 0) end)
+  return list
+end
+
+-- LB / RB in a window with tabs: open the next tab (the open one is the window's selectedTab,
+-- else the checked side tab, else the disabled one), skipping tabs that can't be clicked.
+-- Returns false when the window has no tabs, so the bumper swaps window instead.
+function Nav.NextTab(step)
+  local root = Nav.root
+  local tabs = Nav.Tabs(root)
+  local n = table.getn(tabs)
+  if n < 2 then return false end
+  local cur
+  if root.selectedTab then
+    local want = (root:GetName() or "") .. "Tab" .. root.selectedTab
+    for i = 1, n do if tabs[i]:GetName() == want then cur = i end end
+  end
+  if not cur then
+    for i = 1, n do if tabs[i].GetChecked and tabs[i]:GetChecked() then cur = i; break end end
+  end
+  if not cur then
+    for i = 1, n do if not tabs[i]:IsEnabled() then cur = i; break end end
+  end
+  if not cur then return false end
+  local i = cur
+  for k = 1, n do
+    i = math.mod(i - 1 + step + n, n) + 1
+    if i == cur then return true end
+    if tabs[i]:IsEnabled() then
+      tabs[i]:Click()
+      Nav.cur = nil      -- the new tab starts on its default button
+      if hl:IsShown() then hl:Hide() end
+      Nav.byDpad = true
+      Nav.Refresh()
+      return true
+    end
+  end
+  return true
+end
+
+-- Whether a window has tabs for the bumpers to page.
+function Nav.HasTabs(root) return table.getn(Nav.Tabs(root)) > 1 end
+
+-- Quest log, X: track / untrack the quest on the selected row (or, off the list, the quest
+-- shown on the right), as shift-clicking its title does.
+function Nav.TrackQuest(n)
+  local idx
+  local nm = n and n.GetName and n:GetName() or ""
+  if n and n.GetID and string.find(nm, "^QuestLogTitle%d") then idx = n:GetID() end
+  if not idx or idx < 1 then idx = GetQuestLogSelection() end
+  if not idx or idx < 1 then return end
+  local title, _, _, isHeader = GetQuestLogTitle(idx)
+  if not title or isHeader then return end
+  if IsQuestWatched(idx) then
+    RemoveQuestWatch(idx)
+  else
+    local max = MAX_WATCHABLE_QUESTS or 5
+    if GetNumQuestWatches() >= max then
+      if UIErrorsFrame and QUEST_WATCH_TOO_MANY then
+        UIErrorsFrame:AddMessage(string.format(QUEST_WATCH_TOO_MANY, max), 1, 0.1, 0.1, 1)
+      end
+      return
+    end
+    AddQuestWatch(idx)
+  end
+  if QuestLog_SetSelection then QuestLog_SetSelection(idx) end
+  if QuestWatch_Update then QuestWatch_Update() end
+  if QuestLog_Update then QuestLog_Update() end
+end
+
+-- B on the focused window: the button that closes it (its close button, Cancel, the game menu's
+-- Return to Game, a roll's Pass), or nil.
+local function CloseButtonOf(root)
+  local name = root and root:GetName()
+  if not name then return nil end
+  if string.find(name, "^GroupLootFrame%d") then return getglobal(name .. "PassButton") end
+  if name == "GameMenuFrame" then return getglobal("GameMenuButtonContinue") end
+  local function Shown(b) return IsFrame(b) and b:IsVisible() and b end
+  local b = Shown(getglobal(name .. "CloseButton"))
+  if b then return b end
+  local kids = { root:GetChildren() }
+  for i = 1, table.getn(kids) do
+    local n = kids[i]:GetName()
+    if n and string.find(n, "CloseButton$") and kids[i]:IsVisible() then return kids[i] end
+  end
+  b = Shown(getglobal(name .. "Cancel")) or Shown(getglobal(name .. "CancelButton"))
+  if b then return b end
+  for i = 1, table.getn(kids) do
+    local n = kids[i]:GetName()
+    if n and (string.find(n, "Cancel$") or string.find(n, "CancelButton$")) and kids[i]:IsVisible()
+        and kids[i]:GetObjectType() == "Button" then return kids[i] end
+  end
+  return nil
 end
 
 -- Collect the roots, nodes and lists; keep the selection and refresh the boxes and hints.
@@ -599,6 +731,9 @@ function Nav.Refresh()
     elseif rn == "WowPadKeyboard" then pref = { WP.Keyboard.firstKey }
     elseif rn == "WowPadFirstTime" then pref = { getglobal("WowPadFirstTimeNext") }
     elseif rn == "WowPadInfo" then pref = { getglobal("WowPadInfoCloseButton") }
+    elseif rn and string.find(rn, "^GroupLootFrame%d") then
+      -- Need if allowed, else Greed (disabled buttons aren't nodes).
+      pref = { getglobal(rn .. "RollButton"), getglobal(rn .. "GreedButton") }
     elseif rn and string.find(rn, "^StaticPopup%d$") and Nav.root.which == "WOWPAD_DESTROY" then
       pref = { getglobal(rn .. "Button2") }   -- Cancel, so a double press never destroys
     end
@@ -653,6 +788,16 @@ function Nav.Back()
   if WP.MapBack and WP.MapBack() then return end
   if CursorHasItem() or CursorHasSpell() then ClearCursor() return end
   if WP.Bar and WP.Bar.editing then WP.Bar.SetEditing(false) return end
+  -- The focused window only, as on 3.3.5: its own close / cancel button, else hide it.
+  local root = Nav.Active() and Nav.root
+  if root and root:IsVisible() then
+    if IsBags(root) then CloseAllBags() return end
+    local b = CloseButtonOf(root)
+    if b then b:Click() return end
+    if root ~= WP.Radial and HideUIPanel then HideUIPanel(root) end
+    if root:IsVisible() then root:Hide() end
+    return
+  end
   CloseMenus()
   CloseAllWindows()
 end
@@ -708,7 +853,8 @@ local function SlotSignal(i, down)
     local sig = WP.SLOT_SIGNALS[i]
     if i <= 4 then Nav.Move(sig)
     elseif i == 5 and WP.OwnMenu() then Nav.Press()
-    elseif i == 6 then Nav.Back() end
+    elseif i == 6 then Nav.Back()
+    elseif i == 7 and Nav.Active() and Nav.root == QuestLogFrame then Nav.TrackQuest(Nav.cur) end
     -- Elsewhere A and X are mouse clicks, pressed by benilla-wowpad.
     return
   end
@@ -749,7 +895,10 @@ local function Bumper(which)
       WP.Keyboard.Page(which == "LB" and -1 or 1)
       return
     end
-    if WP.Nav then WP.Nav.CycleRoot(which == "LB" and -1 or 1) end
+    if WP.Nav then
+      local step = which == "LB" and -1 or 1
+      if not (Nav.Active() and Nav.NextTab(step)) then Nav.CycleRoot(step) end
+    end
     return
   end
   local swap = WowPadDB and WowPadDB.swapBumpers == true
@@ -910,15 +1059,22 @@ local function SetMode(mode)
   if WP.Bar then WP.Bar.UpdateVisibility() end
 end
 
+-- LT / RT with a window that has tabs (so the bumpers page them): the press swaps window, as on
+-- 3.3.5. The set still shows while the trigger is held.
+local function TriggerSwap(step)
+  if WP.set ~= 0 or not Nav.Active() or not Nav.root or not Nav.HasTabs(Nav.root) then return end
+  if table.getn(Nav.roots) > 1 then Nav.CycleRoot(step) end
+end
+
 -- Signals that act once, on their key going down.
 local ON_DOWN = {
   MODE_CONTROLLER = function() SetMode("controller") end,
   MODE_DESKTOP    = function() SetMode("desktop") end,
   POINTER_ON      = function() WP.pointer = true; WP.UpdateStatus() end,
   POINTER_OFF     = function() WP.pointer = false; WP.UpdateStatus() end,
-  LT_ON           = function() WP.lt = true; SetFromTriggers() end,
+  LT_ON           = function() TriggerSwap(-1); WP.lt = true; SetFromTriggers() end,
   LT_OFF          = function() WP.lt = false; SetFromTriggers() end,
-  RT_ON           = function() WP.rt = true; SetFromTriggers() end,
+  RT_ON           = function() TriggerSwap(1); WP.rt = true; SetFromTriggers() end,
   RT_OFF          = function() WP.rt = false; SetFromTriggers() end,
   ZOOM_ON         = function() zoomHint:Show() end,
   ZOOM_OFF        = function() zoomHint:Hide() end,
