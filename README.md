@@ -46,7 +46,9 @@ addon installs itself into `benilla-config/AddOns/WowPad` when the game starts.
 ## Install
 
 WowPad is a crate plus a small engine patch that goes on top of a benilla checkout
-(<https://github.com/samwhosung/benilla>, or any fork of it). You need what benilla itself needs
+(<https://github.com/samwhosung/benilla>, or any fork of it). It needs benilla's `main` branch
+from after the 0.2.0 release: 0.2.0 itself predates the API that lets a crate build on top of
+benilla, so WowPad can't be built on it. You need what benilla itself needs
 to build: Git, and Rust from <https://rustup.rs> (on Windows, with the MSVC build tools the Rust
 installer sets up).
 
