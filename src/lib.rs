@@ -26,6 +26,7 @@ use bevy::input::InputSystems;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
+use benilla_world::view::LookAim;
 use config::Config;
 use pad::{Layout, PadState};
 use std::collections::HashMap;
@@ -40,6 +41,7 @@ impl Plugin for WowPadPlugin {
             .insert_resource(Config::load())
             .init_resource::<Mapper>()
             .init_resource::<interact::Soft>()
+            .init_resource::<LookAim>()
             .add_systems(Startup, addon::install_addon)
             .add_systems(
                 PreUpdate,
@@ -386,7 +388,7 @@ fn drive(
     mut motion: ResMut<AccumulatedMouseMotion>,
     mut m: ResMut<Mapper>,
     mut interact: MessageWriter<benilla_app::Interact>,
-    (world, mut soft): (interact::World, ResMut<interact::Soft>),
+    (world, mut soft, mut look): (interact::World, ResMut<interact::Soft>, ResMut<LookAim>),
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
@@ -426,6 +428,7 @@ fn drive(
     };
     let (Some(script), Some(frame)) = (script.filter(|_| in_world), frame) else {
         // Before the world, or without the addon: the glue screens' keys.
+        look.0 = None;
         let mut glue = std::mem::take(&mut m.glue);
         *m = Mapper::default();
         let mut window = windows.single_mut().ok();
@@ -527,8 +530,15 @@ fn drive(
         real_press,
         real_motion,
     );
+    // While the camera turns, benilla's hover (mouseover, its tooltip) aims at the crosshair.
+    let aim = (m.controller && m.enabled && io.frame.looking && !m.pointer && !io.frame.menu)
+        .then(|| io.crosshair())
+        .flatten();
     let (key_out, interact_out) = (std::mem::take(&mut io.key_out), io.interact_out);
     drop(io);
+    if look.0 != aim {
+        look.0 = aim;
+    }
     m.hide_os = m.controller && m.enabled && m.focused;
     for (k, down) in key_out {
         glue::key(k, down, &mut keys, &mut key_events);

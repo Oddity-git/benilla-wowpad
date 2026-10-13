@@ -2,10 +2,13 @@
 
 ## Unreleased
 
+- Crosshair tooltips are live: what is under the crosshair shows while the camera turns, so
+  the camera no longer pauses when the stick rests (`/wp peek` brings the pause back). Needs the
+  new engine patch `02-look-hover`; the installer applies it.
 - Interact prompt: an X icon shows over what X would use when it is in reach, and X uses it
   without changing your target.
-- WowPad no longer patches benilla's interact code: it uses benilla's own API for it, so only
-  one engine patch is left.
+- WowPad no longer patches benilla's interact code: it uses benilla's own API for it, so that
+  patch is gone.
 - LT / RT and LB / RB swap windows by where they sit on screen, and stop at the last one.
 - Bar and mover positions stay put (a centred bar stays centred) when the UI scale changes.
 - Bag addons like OneBag get the bag hints, and the hints show Y preview / compare.

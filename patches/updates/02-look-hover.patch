@@ -1,0 +1,104 @@
+diff --git a/crates/benilla-app/src/target/hover.rs b/crates/benilla-app/src/target/hover.rs
+index a835ccfc..8515fad0 100644
+--- a/crates/benilla-app/src/target/hover.rs
++++ b/crates/benilla-app/src/target/hover.rs
+@@ -34,12 +34,13 @@ pub(super) fn update_pick_occlusion(
+     spatial: avian3d::prelude::SpatialQuery,
+     occluders: Query<(), With<PickOccluder>>,
+     mut occlusion: ResMut<PickOcclusion>,
++    (rig, look_aim): (Res<CameraControl>, Option<Res<benilla_world::view::LookAim>>),
+ ) {
+     *occlusion = PickOcclusion::default();
+     let (Ok((camera, cam_tf)), Ok(window)) = (camera.single(), window.single()) else {
+         return;
+     };
+-    let Some(cursor) = window.cursor_position() else {
++    let Some(cursor) = look_point(&rig, look_aim.as_deref()).or(window.cursor_position()) else {
+         return;
+     };
+     let Ok(ray) = camera.viewport_to_world(cam_tf, cursor) else {
+@@ -60,6 +61,11 @@ pub(super) fn update_pick_occlusion(
+     }
+ }
+ 
++/// Deviation ([`benilla_world::view::LookAim`]): a crate's aim point while the camera turns.
++fn look_point(rig: &CameraControl, aim: Option<&benilla_world::view::LookAim>) -> Option<Vec2> {
++    rig.is_looking().then(|| aim.and_then(|a| a.0)).flatten()
++}
++
+ /// The model instances whose parts are `unit`'s pick geometry: the body, everything it wears, and
+ /// its mount. The reference's `0x480d90` walks the CM2 attachment tree (`[model+0x1dc]` head,
+ /// `[+0x1e4]` sibling) and registers each model (`0x713cb0`) under one candidate, so a hit on a
+@@ -179,7 +185,7 @@ fn posed_parts<'a>(
+ pub(super) fn update_hover(
+     camera: Query<(&Camera, &GlobalTransform), With<WorldCamera>>,
+     window: Query<&Window, With<PrimaryWindow>>,
+-    rig: Res<CameraControl>,
++    (rig, look_aim): (Res<CameraControl>, Option<Res<benilla_world::view::LookAim>>),
+     pointer_over_ui: Res<PointerOverUi>,
+     occlusion: Res<PickOcclusion>,
+     // The unit whose plate holds the hover after this frame's UI walk.
+@@ -249,14 +255,15 @@ pub(super) fn update_hover(
+             return;
+         }
+     }
+-    if rig.is_looking() || pointer_over_ui.0 {
++    let aim = look_point(&rig, look_aim.as_deref());
++    if (rig.is_looking() && aim.is_none()) || pointer_over_ui.0 {
+         *last_pick = None;
+         return;
+     }
+     let (Ok((camera, cam_tf)), Ok(window)) = (camera.single(), window.single()) else {
+         return;
+     };
+-    let Some(cursor) = window.cursor_position() else {
++    let Some(cursor) = aim.or(window.cursor_position()) else {
+         return;
+     };
+     let Ok(ray) = camera.viewport_to_world(cam_tf, cursor) else {
+@@ -542,7 +549,7 @@ impl GoGateInputs<'_> {
+ pub(super) fn update_hovered_object(
+     camera: Query<(&Camera, &GlobalTransform), With<WorldCamera>>,
+     window: Query<&Window, With<PrimaryWindow>>,
+-    rig: Res<CameraControl>,
++    (rig, look_aim): (Res<CameraControl>, Option<Res<benilla_world::view::LookAim>>),
+     pointer_over_ui: Res<PointerOverUi>,
+     occlusion: Res<PickOcclusion>,
+     // The unit pick, earlier in the chain: a unit hover keeps the GameObject halo shut.
+@@ -585,7 +592,8 @@ pub(super) fn update_hovered_object(
+     hovered.guid = None;
+     hovered.distance = f32::MAX;
+     // The sticky pick drops the moment the pointer is not ours.
+-    let yielded = rig.is_looking() || pointer_over_ui.0;
++    let aim = look_point(&rig, look_aim.as_deref());
++    let yielded = (rig.is_looking() && aim.is_none()) || pointer_over_ui.0;
+     if yielded {
+         *last_pick = None;
+     }
+@@ -604,7 +612,7 @@ pub(super) fn update_hovered_object(
+     if yielded {
+         return;
+     }
+-    let Some(cursor) = window.cursor_position().or(probe_aim) else {
++    let Some(cursor) = aim.or(window.cursor_position()).or(probe_aim) else {
+         return;
+     };
+     if pickable.is_empty() {
+diff --git a/crates/benilla-world/src/view.rs b/crates/benilla-world/src/view.rs
+index a3ebf682..58b3885f 100644
+--- a/crates/benilla-world/src/view.rs
++++ b/crates/benilla-world/src/view.rs
+@@ -289,6 +289,13 @@ pub fn within_farclip(
+ #[derive(Component)]
+ pub struct WorldCamera;
+ 
++/// Deviation, for a crate on top (a gamepad's crosshair): while the camera turns (mouselook), the
++/// hover picks aim at this viewport point instead of yielding, so the mouseover, its tooltip and
++/// the cursor's interact grade follow the crosshair. 1.12 has no pointer during mouselook. Absent,
++/// or `None`, the picks yield as the reference's do.
++#[derive(Resource, Default, Clone, Copy, Debug)]
++pub struct LookAim(pub Option<Vec2>);
++
+ /// The `$WOW_MSAA` knob as a Bevy `Msaa` level, 4x when unset. `8` falls back to 4x:
+ /// `Rgba16Float` is only guaranteed `[1, 4]` samples, and there is no adapter to ask here.
+ pub fn msaa_from_env() -> bevy::render::view::Msaa {

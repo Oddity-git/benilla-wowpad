@@ -153,37 +153,34 @@ pub struct Soft {
 pub struct World<'w, 's> {
     objects: Objects<'w, 's>,
     transforms: Query<'w, 's, &'static Transform>,
-    camera: Query<'w, 's, (&'static Camera, &'static GlobalTransform), With<WorldCamera>>,
-    places: Query<'w, 's, &'static GlobalTransform>,
+    camera: Query<'w, 's, (&'static Camera, &'static Transform), With<WorldCamera>>,
 }
 
 impl World<'_, '_> {
     /// The camera the world renders through (the active one: off-screen booths have their own).
-    fn view(&self) -> Option<(&Camera, &GlobalTransform)> {
-        self.camera.iter().find(|(c, _)| c.is_active)
+    fn view(&self) -> Option<(&Camera, GlobalTransform)> {
+        self.camera
+            .iter()
+            .find(|(c, _)| c.is_active)
+            .map(|(c, pose)| (c, GlobalTransform::from(*pose)))
     }
 
-    /// Where the prompt goes for `entity`: a little above it on screen, as fractions of the
+    /// Where the prompt goes for `entity`: over it on screen, as fractions of the
     /// viewport from its top-left corner. `None` behind the camera or off screen.
     fn prompt_at(&self, entity: Entity, verb: Verb) -> Option<Vec2> {
+        // Projected as benilla seats its own world-anchored overlays (the chat bubble): the camera's
+        // and the object's own `Transform`.
         let (camera, cam) = self.view()?;
-        let at = self.places.get(entity).ok()?.translation();
-        // A standing NPC's head height, a lying corpse's, or an object's top, roughly; the scale
-        // field grows them for big models.
-        let scale = self
-            .objects
-            .iter()
-            .find(|(_, e, _)| *e == entity)
-            .and_then(|(_, _, f)| f.object_scale_x())
-            .filter(|s| *s > 0.0)
-            .unwrap_or(1.0);
+        let tf = self.transforms.get(entity).ok()?;
+        // Where the icon's middle goes: about head height on a standing NPC (just under its quest
+        // mark), low over a corpse, over the middle of an object; scaled with the model.
         let up = match verb {
-            Verb::Talk => 2.4,
-            Verb::Loot | Verb::Skin => 0.9,
-            _ => 1.4,
-        } * scale;
+            Verb::Talk => 1.9,
+            Verb::Loot | Verb::Skin => 0.5,
+            _ => 0.8,
+        } * tf.scale.y.max(0.1);
         let size = camera.logical_viewport_size()?;
-        let p = camera.world_to_viewport(cam, at + Vec3::Y * up).ok()?;
+        let p = camera.world_to_viewport(&cam, tf.translation + Vec3::Y * up).ok()?;
         if p.x < 0.0 || p.y < 0.0 || p.x > size.x || p.y > size.y {
             return None;
         }

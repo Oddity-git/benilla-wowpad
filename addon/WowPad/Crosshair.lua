@@ -2,9 +2,10 @@
 -- camera look on or paused for the peek), plus the tooltip of the unit under it, as a mouse
 -- pointer would give.
 --
--- The game does not track the unit under the pointer during camera look, so the tooltip shows
--- when the right stick rests and camera look pauses (the peek, Core.lua); benilla-wowpad parks the
--- hidden pointer at the crosshair for it.
+-- 1.12 does not track the unit under the pointer during camera look; benilla-wowpad aims benilla's
+-- hover at the crosshair instead (patch 02-look-hover), so the mouseover follows it live. With the
+-- peek on (Core.lua) camera look also pauses when the right stick rests, and benilla-wowpad parks
+-- the hidden pointer at the crosshair.
 -- Dot colour: red = attackable, green = friendly, yellow = neutral, white = nothing.
 -- /wp crosshair toggles it, /wp peek toggles the peek.
 

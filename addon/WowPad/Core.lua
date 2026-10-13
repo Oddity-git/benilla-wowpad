@@ -982,9 +982,10 @@ end
 ---------------------------------------------------------------------------
 local weStarted, mlElapsed = false, 0
 
--- Crosshair peek: what is under the pointer is ignored during camera look, so when the right
--- stick rests (CAM_IDLE) camera look pauses and the unit under the crosshair shows. CAM_ACTIVE
--- arrives before the stick moves again and turns camera look straight back on. /wp peek toggles.
+-- Crosshair peek: benilla-wowpad aims benilla's hover at the crosshair during camera look, so the
+-- unit under it shows live. The peek is now opt-in (/wp peek): when the right stick rests
+-- (CAM_IDLE) camera look pauses, and CAM_ACTIVE arrives before the stick moves again and turns it
+-- straight back on. A ground spell waiting for its location always pauses it, so A can place it.
 WP.peeking = false
 local function CameraWanted()
   return WP.mode == "controller" and not WP.pointer and not AnyWindowOpen()
@@ -1031,7 +1032,7 @@ function WowPad_PlaceBegin()
 end
 
 local function CamIdle()
-  local peek = (WowPadDB and WowPadDB.peek ~= false) or SpellIsTargeting()
+  local peek = (WowPadDB and WowPadDB.peekPause == true) or SpellIsTargeting()
   if peek and CameraWanted() and IsMouselooking() then
     WP.peeking = true
     MouselookStop()
@@ -1265,8 +1266,8 @@ SlashCmdList["WOWPAD"] = function(msg)
   elseif cmd == "crosshair" then
     if WP.ToggleCrosshair then WP.ToggleCrosshair() end
   elseif cmd == "peek" then
-    WowPadDB.peek = (WowPadDB.peek == false)
-    Print("Crosshair peek (tooltips when the right stick rests): " .. (WowPadDB.peek and "on" or "off"))
+    WowPadDB.peekPause = not WowPadDB.peekPause
+    Print("Crosshair peek (camera look pauses when the right stick rests): " .. (WowPadDB.peekPause and "on" or "off"))
   elseif cmd == "blizz" then
     if WP.ToggleBlizzBars then WP.ToggleBlizzBars() end
   elseif cmd == "castbar" then

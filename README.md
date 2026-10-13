@@ -38,7 +38,8 @@ addon installs itself into `benilla-config/AddOns/WowPad` when the game starts.
 - An on-screen keyboard for chat (Back + A) and text fields, a Controller Map, a welcome window,
   and a party highlight in healer mode.
 - Start opens a radial main menu; Y opens a target menu; the D-pad and A drive any window.
-- A drawn pointer for pointer mode (R3) and a crosshair with tooltips when the stick rests.
+- A drawn pointer for pointer mode (R3) and a crosshair whose tooltips follow it as the camera
+  turns.
 - A world map cursor with coordinates.
 - Options window: `/wp options`, the minimap button, or the WowPad button under the Esc menu.
 - Unmapped pads on Linux (8BitDo Ultimate 2, Steam Controller through Steam Input) are detected.
@@ -59,6 +60,7 @@ From your benilla folder:
 ```sh
 git clone https://github.com/Oddity-git/benilla-wowpad crates/benilla-wowpad
 git apply -3 crates/benilla-wowpad/patches/01-client-action-slots.patch
+git apply -3 crates/benilla-wowpad/patches/02-look-hover.patch
 cargo build --release -p benilla-wowpad
 ```
 
@@ -110,6 +112,9 @@ What it does differently from the manual steps:
 
 - `01-client-action-slots`: action slots 121-256 are client-only, so the controller bar has slots
   of its own that never touch your normal action bars.
+- `02-look-hover`: while the camera turns, benilla's mouseover (the unit or object, its tooltip and
+  highlight) follows the crosshair instead of switching off, so tooltips show live without the
+  camera pausing. Without WowPad driving it, nothing changes.
 
 A daily check (`.github/workflows/upstream.yml`) installs WowPad onto the newest benilla `main`
 on Linux and Windows and builds it, so a patch that stops fitting gets refreshed here.
@@ -282,7 +287,8 @@ setting applies at once; numbers are steppers the D-pad can work.
 
 - **Sticks:** camera, pointer and zoom speed, peek delay, invert camera, smooth camera, walk/run
   by stick tilt.
-- **Crosshair:** dot on/off, crosshair tooltips ("peek").
+- **Crosshair:** dot on/off, and the old "peek" (camera look pauses when the stick rests), now
+  off by default.
 - **Buttons:** X also starts auto attack, swap LB / RB, healer mode, PlayStation labels, swap
   X / Y, on-screen keyboard, utility ring.
 - **Bars:** controller bar always visible, lite bar, lite hidden cooldowns, hide Blizzard's bars

@@ -21,7 +21,7 @@ function M.Update()
   if not show then frame:Hide(); return end
   icon:SetTexture(WP.FaceTexture("X"))
   frame:ClearAllPoints()
-  frame:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT",
+  frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT",
     atX * UIParent:GetWidth(), (1 - atY) * UIParent:GetHeight())
   frame:Show()
 end
@@ -34,8 +34,14 @@ function WowPad_InteractPrompt(v)
 end
 
 -- Called by benilla-wowpad as the thing moves on screen.
+local said
 function WowPad_InteractPromptAt(x, y)
   atX, atY = x, y
+  if WowPadDB and WowPadDB.debug and x and (not said or GetTime() - said > 2) then
+    said = GetTime()
+    WP.Print(string.format("prompt %s at %.3f, %.3f of the screen (UIParent %.0f x %.0f)",
+      tostring(verb), x, y, UIParent:GetWidth(), UIParent:GetHeight()))
+  end
   M.Update()
 end
 

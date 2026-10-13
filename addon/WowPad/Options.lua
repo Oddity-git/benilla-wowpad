@@ -160,9 +160,9 @@ Check("WowPadOptWalk", "Walk/run by stick tilt",
 Header("Crosshair", L, -256)
 Check("WowPadOptCross", "Show the crosshair dot", "A dot at the crosshair while the right stick drives the camera.",
   L, -274, function() return DB().crosshair ~= false end, Put("crosshair"))
-Check("WowPadOptPeek", "Crosshair tooltips (peek)",
-  "When the right stick rests, camera look pauses for a moment so the unit under the crosshair shows its tooltip.",
-  L, -298, function() return DB().peek ~= false end, Put("peek"))
+Check("WowPadOptPeek", "Pause the camera when the stick rests (peek)",
+  "Tooltips under the crosshair now show while the camera turns. On, camera look also pauses when the right stick rests, as older versions did.",
+  L, -298, function() return DB().peekPause == true end, Put("peekPause"))
 
 Header("Messages", L, -334)
 Check("WowPadOptStatus", "Show the status line", "Mode, set and context near the top of the screen.",
