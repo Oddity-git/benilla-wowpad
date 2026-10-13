@@ -21,8 +21,10 @@ function M.Update()
   if not show then frame:Hide(); return end
   icon:SetTexture(WP.FaceTexture("X"))
   frame:ClearAllPoints()
+  -- GetScreenWidth/Height are UIParent's size in its own units (the UI scale divided out), the
+  -- units its SetPoint offsets use; UIParent:GetWidth() is the unscaled span, as in 1.12.
   frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT",
-    atX * UIParent:GetWidth(), (1 - atY) * UIParent:GetHeight())
+    atX * GetScreenWidth(), (1 - atY) * GetScreenHeight())
   frame:Show()
 end
 
@@ -39,8 +41,8 @@ function WowPad_InteractPromptAt(x, y)
   atX, atY = x, y
   if WowPadDB and WowPadDB.debug and x and (not said or GetTime() - said > 2) then
     said = GetTime()
-    WP.Print(string.format("prompt %s at %.3f, %.3f of the screen (UIParent %.0f x %.0f)",
-      tostring(verb), x, y, UIParent:GetWidth(), UIParent:GetHeight()))
+    WP.Print(string.format("prompt %s at %.3f, %.3f of the screen (%.0f x %.0f, UI scale %.2f)",
+      tostring(verb), x, y, GetScreenWidth(), GetScreenHeight(), UIParent:GetEffectiveScale()))
   end
   M.Update()
 end

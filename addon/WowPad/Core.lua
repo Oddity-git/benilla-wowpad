@@ -1244,6 +1244,10 @@ SlashCmdList["WOWPAD"] = function(msg)
   if cmd == "debug" then
     WowPadDB.debug = not WowPadDB.debug
     Print("Debug messages " .. (WowPadDB.debug and "on" or "off"))
+  elseif cmd == "save" then
+    -- Saved variables are written only when the UI shuts down; a UI reload is one, short of a logout.
+    Print("Saving settings (reloading the UI)...")
+    ReloadUI()
   elseif cmd == "prompt" then
     WowPadDB.interactPrompt = not (WowPadDB.interactPrompt ~= false)
     Print("Interact prompt (X over what X would use): " .. ((WowPadDB.interactPrompt ~= false) and "on" or "off"))
@@ -1329,7 +1333,7 @@ SlashCmdList["WOWPAD"] = function(msg)
   else
     Print(string.format("mode=%s set=%s context=%s pointer=%s", WP.mode, tostring(WP.set),
       tostring(WP.context), tostring(WP.pointer)))
-    Print("/wp options | map | firsttime | keyboard | edit | bar | lite | blizz | castbar | compare | prompt | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
+    Print("/wp options | map | firsttime | keyboard | edit | bar | lite | blizz | castbar | compare | prompt | save | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
           .. " | invert | smooth | walk | swap | healer | ring <set_slot|off> | xattack | xbox | ps | status | debug")
   end
 end

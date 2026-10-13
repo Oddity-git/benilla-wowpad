@@ -1,0 +1,24 @@
+diff --git a/crates/benilla-app/src/target/hover.rs b/crates/benilla-app/src/target/hover.rs
+index 8515fad0..fb7e4294 100644
+--- a/crates/benilla-app/src/target/hover.rs
++++ b/crates/benilla-app/src/target/hover.rs
+@@ -255,8 +255,9 @@ pub(super) fn update_hover(
+             return;
+         }
+     }
++    // The aim point is not the pointer: the UI under the parked pointer does not take it.
+     let aim = look_point(&rig, look_aim.as_deref());
+-    if (rig.is_looking() && aim.is_none()) || pointer_over_ui.0 {
++    if aim.is_none() && (rig.is_looking() || pointer_over_ui.0) {
+         *last_pick = None;
+         return;
+     }
+@@ -593,7 +594,7 @@ pub(super) fn update_hovered_object(
+     hovered.distance = f32::MAX;
+     // The sticky pick drops the moment the pointer is not ours.
+     let aim = look_point(&rig, look_aim.as_deref());
+-    let yielded = (rig.is_looking() && aim.is_none()) || pointer_over_ui.0;
++    let yielded = aim.is_none() && (rig.is_looking() || pointer_over_ui.0);
+     if yielded {
+         *last_pick = None;
+     }

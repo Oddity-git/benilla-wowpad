@@ -61,6 +61,7 @@ From your benilla folder:
 git clone https://github.com/Oddity-git/benilla-wowpad crates/benilla-wowpad
 git apply -3 crates/benilla-wowpad/patches/01-client-action-slots.patch
 git apply -3 crates/benilla-wowpad/patches/02-look-hover.patch
+git apply -3 crates/benilla-wowpad/patches/03-look-hover-plates.patch
 cargo build --release -p benilla-wowpad
 ```
 
@@ -115,6 +116,8 @@ What it does differently from the manual steps:
 - `02-look-hover`: while the camera turns, benilla's mouseover (the unit or object, its tooltip and
   highlight) follows the crosshair instead of switching off, so tooltips show live without the
   camera pausing. Without WowPad driving it, nothing changes.
+- `03-look-hover-plates`: the same, when a nameplate or other UI sits under the hidden pointer
+  (as in a fight).
 
 A daily check (`.github/workflows/upstream.yml`) installs WowPad onto the newest benilla `main`
 on Linux and Windows and builds it, so a patch that stops fitting gets refreshed here.
@@ -302,7 +305,10 @@ the first time; restart the game after editing it.
 Chat commands: `/wp options`, `/wp edit`, `/wp map`, `/wp firsttime`, `/wp keyboard`, `/wp bar`,
 `/wp lite`, `/wp blizz`, `/wp castbar`, `/wp compare`, `/wp crosshair`, `/wp peek`,
 `/wp scale 0.8`, `/wp sens 0.7`, `/wp psens 1.0`, `/wp ring 3_8`, `/wp ps`, `/wp xbox`,
-`/wp status`, `/wp debug`.
+`/wp status`, `/wp debug`, `/wp save`.
+
+Settings are saved when the UI shuts down: at logout, quit, or a UI reload. `/wp save` reloads
+the UI to save them without logging out.
 
 ## Troubleshooting
 

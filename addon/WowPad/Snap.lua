@@ -16,9 +16,10 @@ line:SetPoint("TOP", UIParent, "TOP", 0, 0)
 line:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 0)
 
 -- UIParent's centre in frame f's own units (what f:GetCenter() and its SetPoint offsets use).
+-- GetScreenWidth/Height are in UIParent's units; UIParent:GetWidth() is its unscaled span.
 local function MidOf(f)
   local k = UIParent:GetEffectiveScale() / f:GetEffectiveScale()
-  return UIParent:GetWidth() * k / 2, UIParent:GetHeight() * k / 2
+  return GetScreenWidth() * k / 2, GetScreenHeight() * k / 2
 end
 
 -- Positions are kept as the frame centre's offset from the screen centre, so a frame stays where

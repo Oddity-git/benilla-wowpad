@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `/wp save` saves your settings without logging out (it reloads the UI).
+- The X icon, the crosshair dot and the centre-line snap now follow the UI scale setting.
+- Crosshair tooltips also work on what you are fighting (engine patch `03-look-hover-plates`).
 - Crosshair tooltips are live: what is under the crosshair shows while the camera turns, so
   the camera no longer pauses when the stick rests (`/wp peek` brings the pause back). Needs the
   new engine patch `02-look-hover`; the installer applies it.

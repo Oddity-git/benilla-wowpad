@@ -31,7 +31,7 @@ C:SetScript("OnHide", HideOurTooltip)
 -- The crosshair: CrosshairY (wowpad.ini) above the screen centre, where the pointer is parked.
 local function Place()
   C:ClearAllPoints()
-  C:SetPoint("CENTER", UIParent, "CENTER", 0, (WP.crosshairFrac or 0) * UIParent:GetHeight())
+  C:SetPoint("CENTER", UIParent, "CENTER", 0, (WP.crosshairFrac or 0) * GetScreenHeight())
 end
 
 local driver = CreateFrame("Frame")
