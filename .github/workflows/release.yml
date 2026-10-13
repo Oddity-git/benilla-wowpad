@@ -1,11 +1,17 @@
-# Pushing a version tag (v0.1.0) publishes a GitHub release: the CHANGELOG section for that
-# version as its notes, and benilla-wowpad-<version>.zip (this repository, ready to unzip and
-# double-click the installer) as its download.
+# Publishes a GitHub release, from a pushed version tag (v0.1.0) or by hand (Actions > release >
+# Run workflow, with the version): the CHANGELOG section for that version as its notes, and
+# benilla-wowpad-<version>.zip (this repository, ready to unzip and double-click the installer) as
+# its download. Run by hand, it tags the commit it runs on.
 name: release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, as in CHANGELOG.md (e.g. 0.1.0)"
+        required: true
 
 permissions:
   contents: write
@@ -17,7 +23,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Notes and zip
         run: |
-          v="${GITHUB_REF_NAME#v}"
+          v="${{ inputs.version }}"
+          [ -n "$v" ] || v="${GITHUB_REF_NAME#v}"
+          echo "V=$v" >> "$GITHUB_ENV"
           awk -v v="$v" '$0 == "## " v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
           [ -s notes.md ] || { echo "CHANGELOG.md has no '## $v' section"; exit 1; }
           git archive --format=zip --prefix=benilla-wowpad/ -o "benilla-wowpad-$v.zip" HEAD
@@ -25,6 +33,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          v="${GITHUB_REF_NAME#v}"
-          gh release create "$GITHUB_REF_NAME" "benilla-wowpad-$v.zip" \
-            --title "WowPad for benilla $v" --notes-file notes.md
+          gh release create "v$V" "benilla-wowpad-$V.zip" --target "$GITHUB_SHA" \
+            --title "WowPad for benilla $V" --notes-file notes.md
