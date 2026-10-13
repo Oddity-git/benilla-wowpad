@@ -5,7 +5,9 @@ from-scratch WoW 1.12.1 client in Rust: move and look with the sticks, a round c
 bar on the triggers, menus you drive with the D-pad, a radial main menu and a crosshair. It is
 [WowPad](https://github.com/Oddity-git/WoW-Pad), my controller addon for WoW 3.3.5, ported to
 benilla. Client-side only; nothing on the server changes.
-
+<p align="center">
+*some images were pulled from the original addon, minor variance may exist. 
+</p>
 <p align="center">
 <img width="838" height="421" alt="WowPad" src="https://github.com/user-attachments/assets/922fa9c7-8896-4ee9-a7da-88c9d92bf181" />
 </p>
