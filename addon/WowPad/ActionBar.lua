@@ -448,9 +448,7 @@ function Bar.Pos()
 end
 
 local function SavePosition()
-  local x, y = bar:GetCenter()
-  local p = Bar.Pos()
-  p.x, p.y = x, y
+  WP.SavePlace(bar, Bar.Pos())
 end
 
 local PAD = 10   -- margin around the clusters (edit-mode background)
@@ -470,10 +468,8 @@ local function ApplyPosition()
     else c:SetPoint("CENTER", bar, "CENTER", CLUSTERS[set][1], CLUSTERS[set][2]) end
   end
   bar:SetScale(p.scale or 1)
-  bar:ClearAllPoints()
-  if p.x then
-    bar:SetPoint("CENTER", UIParent, "BOTTOMLEFT", p.x, p.y)
-  else
+  if not WP.PlaceAt(bar, p) then
+    bar:ClearAllPoints()
     bar:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, lite and 100 or 120)
   end
 end
@@ -481,11 +477,11 @@ end
 function Bar.SetScale(scale)
   if not bar then return end
   scale = math.max(0.4, math.min(1.6, scale))
-  local x, y = bar:GetCenter()
   local old = bar:GetScale()
   local p = Bar.Pos()
+  if not p.dx then WP.SavePlace(bar, p) end
+  WP.RescalePlace(p, old, scale)
   p.scale = scale
-  if x then p.x, p.y = x * old / scale, y * old / scale end
   ApplyPosition()
 end
 

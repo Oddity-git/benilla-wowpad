@@ -21,11 +21,9 @@ end
 local function ApplyPos(holder)
   local p = DB(holder.key)
   holder:SetScale(p.scale or 1)
-  holder:ClearAllPoints()
-  if p.x then
-    holder:SetPoint("CENTER", UIParent, "BOTTOMLEFT", p.x, p.y)
-  else
+  if not WP.PlaceAt(holder, p) then
     local d = holder.defaultPoint
+    holder:ClearAllPoints()
     holder:SetPoint(d[1], d[2], d[3], d[4], d[5])
   end
 end
@@ -46,17 +44,16 @@ local function MakeMover(holder, label)
   m:SetScript("OnDragStart", function() WP.SnapDragStart(holder) end)
   m:SetScript("OnDragStop", function()
     WP.SnapDragStop()
-    local p = DB(holder.key)
-    p.x, p.y = holder:GetCenter()
+    WP.SavePlace(holder, DB(holder.key))
   end)
   m:EnableMouseWheel(true)
   m:SetScript("OnMouseWheel", function()
     local p = DB(holder.key)
     local old = holder:GetScale()
     local new = math.max(0.4, math.min(2.0, (p.scale or 1) + arg1 * 0.05))
-    local x, y = holder:GetCenter()
+    if not p.dx then WP.SavePlace(holder, p) end
+    WP.RescalePlace(p, old, new)
     p.scale = new
-    if x then p.x, p.y = x * old / new, y * old / new end
     ApplyPos(holder)
   end)
   m:Hide()

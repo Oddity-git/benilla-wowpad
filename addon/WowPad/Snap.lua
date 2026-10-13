@@ -15,6 +15,43 @@ line:SetWidth(2)
 line:SetPoint("TOP", UIParent, "TOP", 0, 0)
 line:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 0)
 
+-- UIParent's centre in frame f's own units (what f:GetCenter() and its SetPoint offsets use).
+local function MidOf(f)
+  local k = UIParent:GetEffectiveScale() / f:GetEffectiveScale()
+  return UIParent:GetWidth() * k / 2, UIParent:GetHeight() * k / 2
+end
+
+-- Positions are kept as the frame centre's offset from the screen centre, so a frame stays where
+-- it was (a centred one stays centred) when the UI scale or the window size changes. Older saves
+-- (p.x, p.y from the bottom-left corner) are converted the first time they are placed.
+function WP.PlaceAt(f, p)
+  if p.x and not p.dx then
+    local mx, my = MidOf(f)
+    p.dx, p.dy = p.x - mx, p.y - my
+  end
+  p.x, p.y = nil, nil
+  if not p.dx then return false end
+  f:ClearAllPoints()
+  f:SetPoint("CENTER", UIParent, "CENTER", p.dx, p.dy)
+  return true
+end
+
+-- Remember where f is now, in p.
+function WP.SavePlace(f, p)
+  local x, y = f:GetCenter()
+  if not x then return end
+  local mx, my = MidOf(f)
+  p.dx, p.dy = x - mx, y - my
+  -- a centre within a hair of the line is on it, so rounding never leaves it a pixel off
+  if math.abs(p.dx) < 0.5 then p.dx = 0 end
+  p.x, p.y = nil, nil
+end
+
+-- f's scale is changing from old to new: keep its centre where it is on screen.
+function WP.RescalePlace(p, old, new)
+  if p.dx then p.dx, p.dy = p.dx * old / new, p.dy * old / new end
+end
+
 local dragging, offX, offY
 local driver = CreateFrame("Frame")
 driver:Hide()
@@ -26,11 +63,11 @@ driver:SetScript("OnUpdate", function()
   local x, y = cx / eff + offX, cy / eff + offY
   -- the screen centre and the snap distance in the frame's own units
   local ui = UIParent:GetEffectiveScale()
-  local mid = UIParent:GetWidth() * ui / 2 / eff
-  local snapped = math.abs(x - mid) <= SNAP * ui / eff
-  if snapped then x = mid; guide:Show() else guide:Hide() end
+  local midX, midY = MidOf(f)
+  local snapped = math.abs(x - midX) <= SNAP * ui / eff
+  if snapped then x = midX; guide:Show() else guide:Hide() end
   f:ClearAllPoints()
-  f:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
+  f:SetPoint("CENTER", UIParent, "CENTER", x - midX, y - midY)
 end)
 
 -- Start dragging frame f (from OnDragStart).
@@ -70,11 +107,9 @@ function WP.ApplyMoverPos(f)
   if not WowPadDB then return end
   local p = MoverDB(f.moverKey)
   f:SetScale(p.scale or 1)
-  f:ClearAllPoints()
-  if p.x then
-    f:SetPoint("CENTER", UIParent, "BOTTOMLEFT", p.x, p.y)
-  else
+  if not WP.PlaceAt(f, p) then
     local d = f.moverDefault
+    f:ClearAllPoints()
     f:SetPoint(d[1], d[2], d[3], d[4], d[5])
   end
 end
@@ -107,17 +142,16 @@ function WP.MakeMover(f, key, label, default, size, minScale, maxScale)
   m:SetScript("OnDragStart", function() WP.SnapDragStart(f) end)
   m:SetScript("OnDragStop", function()
     WP.SnapDragStop()
-    local p = MoverDB(key)
-    p.x, p.y = f:GetCenter()
+    WP.SavePlace(f, MoverDB(key))
   end)
   m:EnableMouseWheel(true)
   m:SetScript("OnMouseWheel", function()
     local p = MoverDB(key)
     local old = f:GetScale()
     local new = math.max(minScale or 0.5, math.min(maxScale or 1.5, (p.scale or 1) + arg1 * 0.05))
-    local x, y = f:GetCenter()
+    if not p.dx then WP.SavePlace(f, p) end
+    WP.RescalePlace(p, old, new)
     p.scale = new
-    if x then p.x, p.y = x * old / new, y * old / new end
     WP.ApplyMoverPos(f)
   end)
   m:Hide()
