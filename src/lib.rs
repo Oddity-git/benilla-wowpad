@@ -15,10 +15,10 @@
 pub mod addon;
 pub mod config;
 mod glue;
+pub mod interact;
 pub mod pad;
 
 use benilla_ui::script::UiScript;
-use benilla_world::interact::TargetInteract;
 use bevy::input::gamepad::{GamepadConnection, GamepadConnectionEvent};
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input::mouse::AccumulatedMouseMotion;
@@ -39,8 +39,12 @@ impl Plugin for WowPadPlugin {
         app.add_plugins(bevy::gilrs::GilrsPlugin)
             .insert_resource(Config::load())
             .init_resource::<Mapper>()
+            .init_resource::<interact::Soft>()
             .add_systems(Startup, addon::install_addon)
-            .add_systems(PreUpdate, (log_pads, drive).chain().after(InputSystems))
+            .add_systems(
+                PreUpdate,
+                (log_pads, interact::scan, drive).chain().after(InputSystems),
+            )
             .add_systems(PostUpdate, hide_os_cursor);
     }
 }
@@ -381,7 +385,8 @@ fn drive(
     time: Res<Time>,
     mut motion: ResMut<AccumulatedMouseMotion>,
     mut m: ResMut<Mapper>,
-    mut interact: MessageWriter<TargetInteract>,
+    mut interact: MessageWriter<benilla_app::Interact>,
+    (world, mut soft): (interact::World, ResMut<interact::Soft>),
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
@@ -528,8 +533,11 @@ fn drive(
     for (k, down) in key_out {
         glue::key(k, down, &mut keys, &mut key_events);
     }
-    if interact_out {
-        interact.write(TargetInteract { loot_all: true });
+    if interact_out && interact::press(&world, &mut soft, &mut interact) {
+        // A corpse's loot window takes every row, as X always has.
+        if let Err(e) = script.run("if WowPad_LootAll then WowPad_LootAll() end") {
+            warn!("wowpad: WowPad_LootAll failed: {e}");
+        }
     }
 }
 

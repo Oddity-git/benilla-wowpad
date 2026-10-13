@@ -13,6 +13,7 @@ Keyboard.lua
 UnitMenu.lua
 ActionBar.lua
 LiteCooldowns.lua
+InteractPrompt.lua
 Radial.lua
 Info.lua
 BlizzBars.lua

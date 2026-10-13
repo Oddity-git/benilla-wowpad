@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Interact prompt: **X Talk / Loot / Use** shows when something X can use is in reach, and X
+  uses it without changing your target.
+- WowPad no longer patches benilla's interact code: it uses benilla's own API for it, so only
+  one engine patch is left.
+- LT / RT and LB / RB swap windows by where they sit on screen, and stop at the last one.
+- Bar and mover positions stay put (a centred bar stays centred) when the UI scale changes.
+- Bag addons like OneBag get the bag hints, and the hints show Y preview / compare.
+- Compare (hold Y) works again on the newest benilla.
+
 ## 0.1.0
 
 First release of WowPad on [benilla](https://github.com/samwhosung/benilla), ported from

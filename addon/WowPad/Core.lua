@@ -840,6 +840,8 @@ end
 local function StartAttack()
   if WowPadDB and WowPadDB.xAttack == false then return end
   if WP.autoAttacking then return end
+  -- X went to the prompted NPC, corpse or object, not the target.
+  if WP.interactPrompt then return end
   if UnitExists("target") and UnitCanAttack("player", "target") and not UnitIsDead("target") then
     AttackTarget()
   end
@@ -1241,6 +1243,10 @@ SlashCmdList["WOWPAD"] = function(msg)
   if cmd == "debug" then
     WowPadDB.debug = not WowPadDB.debug
     Print("Debug messages " .. (WowPadDB.debug and "on" or "off"))
+  elseif cmd == "prompt" then
+    WowPadDB.interactPrompt = not (WowPadDB.interactPrompt ~= false)
+    Print("Interact prompt (X Talk / Loot / Use): " .. ((WowPadDB.interactPrompt ~= false) and "on" or "off"))
+    if WP.Prompt then WP.Prompt.Update() end
   elseif cmd == "xattack" then
     WowPadDB.xAttack = not WowPadDB.xAttack
     Print("X also starts attack: " .. (WowPadDB.xAttack and "on" or "off"))
@@ -1322,7 +1328,7 @@ SlashCmdList["WOWPAD"] = function(msg)
   else
     Print(string.format("mode=%s set=%s context=%s pointer=%s", WP.mode, tostring(WP.set),
       tostring(WP.context), tostring(WP.pointer)))
-    Print("/wp options | map | firsttime | keyboard | edit | bar | lite | blizz | castbar | compare | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
+    Print("/wp options | map | firsttime | keyboard | edit | bar | lite | blizz | castbar | compare | prompt | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
           .. " | invert | smooth | walk | swap | healer | ring <set_slot|off> | xattack | xbox | ps | status | debug")
   end
 end

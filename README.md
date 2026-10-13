@@ -58,7 +58,6 @@ From your benilla folder:
 
 ```sh
 git clone https://github.com/Oddity-git/benilla-wowpad crates/benilla-wowpad
-git apply -3 crates/benilla-wowpad/patches/00-soft-interact.patch
 git apply -3 crates/benilla-wowpad/patches/01-client-action-slots.patch
 cargo build --release -p benilla-wowpad
 ```
@@ -109,8 +108,6 @@ What it does differently from the manual steps:
 
 ### What the patches change
 
-- `00-soft-interact`: X interacts with your target the way a right-click on it would, and loots
-  it all.
 - `01-client-action-slots`: action slots 121-256 are client-only, so the controller bar has slots
   of its own that never touch your normal action bars.
 
@@ -157,7 +154,7 @@ On Wayland, launch it as an X11 window so Steam can see it:
 | Right stick | Camera. In menus and pointer mode: the pointer |
 | A | Jump |
 | B | Clear target / back out of menus |
-| X | Interact with your target (talk, loot everything, gather, open) + start attacking a hostile one |
+| X | Interact with what the prompt shows (talk, loot everything, gather, open) without targeting it; with no prompt, your target + start attacking a hostile one |
 | Y | Target menu |
 | LB / RB | Target nearest friendly / enemy (can be swapped in Options; see Healer mode) |
 | LB + RB held | Right stick zooms the camera |
@@ -175,6 +172,13 @@ The Controller Map (Start > page 2 > **Controller**, or `/wp map`) shows this in
 **PlayStation pad?** It is picked up by itself, or choose PlayStation buttons in Options: hints
 and the bar then show ✕ ○ □ △ and L1 / R1 / L2 / R2. Pads that report X and Y swapped: Options >
 **Swap X / Y buttons**.
+
+### Interact prompt
+
+When something X can use is in reach (an NPC with a service, a corpse to loot or skin, a chest,
+herb, vein or mailbox), a prompt shows below the screen centre: **X Talk**, **X Loot**, **X Use**
+and so on. X then acts on it without targeting it, so your target stays yours. In a fight with
+a target, X stays on the target. Move the prompt in edit mode; `/wp prompt` turns it off.
 
 ### In menus (a window open, out of combat)
 
