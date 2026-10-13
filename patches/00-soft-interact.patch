@@ -1,27 +1,8 @@
-diff --git a/crates/benilla-app/src/spell/net.rs b/crates/benilla-app/src/spell/net.rs
-index cccf3e5..9a13705 100644
---- a/crates/benilla-app/src/spell/net.rs
-+++ b/crates/benilla-app/src/spell/net.rs
-@@ -469,7 +469,13 @@ fn spell_book(
- /// `SMSG_ACTION_BUTTONS`, at login and on server-side edits, into the action store.
- fn action_buttons(buttons: Vec<ActionButton>, actions: &mut PlayerActions) {
-     debug!("net: action bar — {} occupied slots", buttons.len());
--    actions.buttons = buttons.into_iter().map(|b| (b.slot, b)).collect();
-+    // The client-only slots are not the server's: the snapshot leaves them be.
-+    actions
-+        .buttons
-+        .retain(|&slot, _| slot >= crate::ui_action::CLIENT_SLOT_FIRST);
-+    actions
-+        .buttons
-+        .extend(buttons.into_iter().map(|b| (b.slot, b)));
-     actions.dirty = true;
- }
- 
 diff --git a/crates/benilla-app/src/target/click.rs b/crates/benilla-app/src/target/click.rs
-index e9aade8..0df023e 100644
+index 9846c0dfe3a8af05803e8bd6fb763d94c0339cce..cb49b9e5cb2ea70a6376c8b2284c3697dcb88ed6 100644
 --- a/crates/benilla-app/src/target/click.rs
 +++ b/crates/benilla-app/src/target/click.rs
-@@ -3145,3 +3145,176 @@ mod tests {
+@@ -3178,3 +3178,176 @@ mod tests {
          }
      }
  }
@@ -199,7 +180,7 @@ index e9aade8..0df023e 100644
 +    right_clicks.write(WorldRightClick);
 +}
 diff --git a/crates/benilla-app/src/target/mod.rs b/crates/benilla-app/src/target/mod.rs
-index 308ddf5..7ee6046 100644
+index 92f963ca57d3128d52e4f25100159462837634ec..d9b7e89187118dce1abd73f2b84b269e44feee6b 100644
 --- a/crates/benilla-app/src/target/mod.rs
 +++ b/crates/benilla-app/src/target/mod.rs
 @@ -294,6 +294,7 @@ impl Plugin for TargetPlugin {
@@ -225,60 +206,11 @@ index 308ddf5..7ee6046 100644
                      // The right press's two legs of the reference's OnMouseDown hook (`0x492c20`),
                      // the targeting cancel and the repair-mode reset, before the cursor drive, so
                      // the press frame already reads both modes cleared.
-diff --git a/crates/benilla-app/src/ui_action/drain.rs b/crates/benilla-app/src/ui_action/drain.rs
-index 4348dd7..10c27d2 100644
---- a/crates/benilla-app/src/ui_action/drain.rs
-+++ b/crates/benilla-app/src/ui_action/drain.rs
-@@ -432,9 +432,11 @@ pub(super) fn drain_action_sets(
-         debug!(
-             "ui_action: set_action_button lua {lua_id} (wire slot {slot}) packed {packed:#010x}"
-         );
--        let _ = commands.0.send(ClientCommand::SetActionButton {
--            button: slot,
--            packed,
--        });
-+        if slot < super::CLIENT_SLOT_FIRST {
-+            let _ = commands.0.send(ClientCommand::SetActionButton {
-+                button: slot,
-+                packed,
-+            });
-+        }
-     }
- }
-diff --git a/crates/benilla-app/src/ui_action/mod.rs b/crates/benilla-app/src/ui_action/mod.rs
-index e46296f..9322411 100644
---- a/crates/benilla-app/src/ui_action/mod.rs
-+++ b/crates/benilla-app/src/ui_action/mod.rs
-@@ -50,6 +50,10 @@ pub(crate) use weapon_icon::{melee_auto_attack_icon, ranged_weapon_icon, substit
- /// keys on this id; the icon keys on `SPELL_EFFECT_ATTACK`, which only 6603 carries.
- pub(crate) const SPELL_ATTACK: u32 = 6603;
- 
-+/// Deviation, for a crate on top: wire slots from here up (Lua action ids 121-256, the UI's
-+/// client-only slots, `SetClientAction`) are stored and used like any slot but never sent.
-+pub(crate) const CLIENT_SLOT_FIRST: u8 = 120;
-+
- /// The action slots (wire 0..119) and the known spells. The bar is client-authoritative:
- /// [`drain::drain_action_sets`] writes it directly, and vmangos stores a slot without a reply
- /// (`MasterPlayer::addActionButton`).
-diff --git a/crates/benilla-app/src/ui_action/ranks.rs b/crates/benilla-app/src/ui_action/ranks.rs
-index ba3e157..55b0ed9 100644
---- a/crates/benilla-app/src/ui_action/ranks.rs
-+++ b/crates/benilla-app/src/ui_action/ranks.rs
-@@ -48,6 +48,9 @@ pub(super) fn normalize_action_ranks(
-         button.action = top;
-         let packed = top | (u32::from(button.kind) << 24);
-         info!("ui_action: bar slot {slot} rank-normalized {was} -> {top}");
-+        if slot >= super::CLIENT_SLOT_FIRST {
-+            continue;
-+        }
-         let _ = commands.0.send(ClientCommand::SetActionButton {
-             button: slot,
-             packed,
 diff --git a/crates/benilla-app/src/ui_loot/mod.rs b/crates/benilla-app/src/ui_loot/mod.rs
-index 4f84f27..e7b166f 100644
+index c1fe2c15c7d65e79a6db7cb46756f3474fc4a845..bda7defffe3524b5f939d65dc4133fee6ccbc869 100644
 --- a/crates/benilla-app/src/ui_loot/mod.rs
 +++ b/crates/benilla-app/src/ui_loot/mod.rs
-@@ -422,6 +422,7 @@ impl Plugin for UiLootPlugin {
+@@ -446,6 +446,7 @@ impl Plugin for UiLootPlugin {
          app.add_observer(on_cvar);
          app.init_resource::<LootState>()
              .init_resource::<LootConfig>()
@@ -286,7 +218,7 @@ index 4f84f27..e7b166f 100644
              .init_resource::<LootLatch>()
              .init_resource::<LootKneel>()
              .init_resource::<LootMoveStart>()
-@@ -695,6 +696,11 @@ impl LootSourceObjects<'_, '_> {
+@@ -720,6 +721,11 @@ impl LootSourceObjects<'_, '_> {
      }
  }
  
@@ -298,7 +230,7 @@ index 4f84f27..e7b166f 100644
  fn feed_loot(
      script: Option<NonSendMut<UiScript>>,
      mut loot: ResMut<LootState>,
-@@ -712,7 +718,8 @@ fn feed_loot(
+@@ -737,7 +743,8 @@ fn feed_loot(
      group: Res<GroupState>,
      names: Res<NameCache>,
      objects: LootSourceObjects,
@@ -308,7 +240,7 @@ index 4f84f27..e7b166f 100644
  ) {
      let Some(mut script) = script else {
          return;
-@@ -756,7 +763,10 @@ fn feed_loot(
+@@ -785,7 +792,10 @@ fn feed_loot(
              // Auto-loot (`LootConfig`), inverted by a held Shift: every row gets a hand pick's
              // sends, and emptying the window auto-releases it.
              let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
@@ -317,104 +249,11 @@ index 4f84f27..e7b166f 100644
 +                .and_then(|mut p| p.0.take())
 +                .is_some_and(|until| std::time::Instant::now() < until);
 +            if cfg.auto_loot != shift || pad {
-                 let mut bind_confirm_fired = false;
-                 for index in 1..=snap.rows.len() as u32 {
-                     match loot.action_at(index) {
-diff --git a/crates/benilla-ui/src/script/action.rs b/crates/benilla-ui/src/script/action.rs
-index 2d2a68c..543c025 100644
---- a/crates/benilla-ui/src/script/action.rs
-+++ b/crates/benilla-ui/src/script/action.rs
-@@ -17,6 +17,15 @@ pub(crate) const ACTION_KIND_SPELL: u8 = 0x00;
- pub(crate) const ACTION_KIND_MACRO: u8 = 0x40;
- pub(crate) const ACTION_KIND_ITEM: u8 = 0x80;
- 
-+/// Deviation, for a crate on top (a gamepad addon's own bar): Lua action ids 121-256 are
-+/// client-only slots past the reference's 120. They work like any slot (icon, range, usable,
-+/// cooldown, `UseAction`, `PickupAction`/`PlaceAction`) but never reach the server, so the
-+/// addon keeps them itself: `SetClientAction(id, kind, action)` writes one (no kind clears it)
-+/// and `GetClientAction(id)` reads any slot's `kind, action`.
-+pub(crate) const CLIENT_ACTION_FIRST: u32 = 121;
-+/// The last client-only Lua action id: the wire slot index is a byte.
-+pub(crate) const CLIENT_ACTION_LAST: u32 = 256;
-+
- /// What one action slot shows; the app resolves the icon before pushing.
- #[derive(Clone, Debug, Default, PartialEq)]
- pub struct ActionSlot {
-@@ -168,6 +177,48 @@ impl super::UiScript {
- pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
-     let g = lua.globals();
- 
-+    // The client-only slots' store, for the addon that owns them (see `CLIENT_ACTION_FIRST`).
-+    g.set(
-+        "SetClientAction",
-+        lua.create_function(|lua, (id, kind, action): (u32, Option<u8>, Option<u32>)| {
-+            if !(CLIENT_ACTION_FIRST..=CLIENT_ACTION_LAST).contains(&id) {
-+                return Ok(false);
-+            }
-+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-+            match kind.zip(action) {
-+                Some((kind, action)) => {
-+                    let action = action & 0x00FF_FFFF;
-+                    model.actions.insert(
-+                        id,
-+                        ActionSlot {
-+                            kind,
-+                            action,
-+                            ..ActionSlot::default()
-+                        },
-+                    );
-+                    model
-+                        .action_sets
-+                        .push((id, (u32::from(kind) << 24) | action));
-+                }
-+                None => {
-+                    model.actions.remove(&id);
-+                    model.action_sets.push((id, 0));
-+                }
-+            }
-+            Ok(true)
-+        })?,
-+    )?;
-+    g.set(
-+        "GetClientAction",
-+        lua.create_function(|lua, id: u32| {
-+            let model = lua.app_data_ref::<Model>().expect("model app_data");
-+            Ok(model
-+                .actions
-+                .get(&id)
-+                .map_or((None, None), |s| (Some(s.kind), Some(s.action))))
-+        })?,
-+    )?;
-+
-     g.set(
-         "HasAction",
-         lua.create_function(|lua, Idx32(action): Idx32| {
-@@ -702,4 +753,23 @@ mod tests {
-             );
-         }
-     }
-+
-+    /// The client-only slots write and read like any slot, queue their write for the app, and
-+    /// refuse the server's 120.
-+    #[test]
-+    fn a_client_action_is_stored_read_back_and_cleared() {
-+        let mut s = UiScript::new().unwrap();
-+        assert!(s
-+            .eval::<bool>("return SetClientAction(121, 0, 133)")
-+            .unwrap());
-+        assert!(s.eval::<bool>("return HasAction(121) == 1").unwrap());
-+        let (kind, action): (u8, u32) = s.eval("return GetClientAction(121)").unwrap();
-+        assert_eq!((kind, action), (0, 133));
-+        assert!(!s
-+            .eval::<bool>("return SetClientAction(120, 0, 133)")
-+            .unwrap());
-+        assert!(s.eval::<bool>("return SetClientAction(121)").unwrap());
-+        assert!(s.eval::<bool>("return HasAction(121) == nil").unwrap());
-+        assert_eq!(s.take_action_sets(), vec![(121, 133), (121, 0)]);
-+    }
- }
+                 sweep_rows(&mut loot, &items, &commands, &mut script, &mut pickup);
+             }
+             // The response's tail (`0x5ebc3a`-`0x5ebc51`) closes a window that opened while we
 diff --git a/crates/benilla-world/src/interact/mod.rs b/crates/benilla-world/src/interact/mod.rs
-index 59af587..b09547e 100644
+index 59af5877dbe39fbecf6ea33851c30ceea938fdfa..b09547ed77e3b6999e3f13f43c351259ecab35d7 100644
 --- a/crates/benilla-world/src/interact/mod.rs
 +++ b/crates/benilla-world/src/interact/mod.rs
 @@ -60,6 +60,16 @@ pub struct WorldRightClick;

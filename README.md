@@ -21,30 +21,35 @@ crate, running inside benilla, and the addon is ported to the 1.12 API. The bina
 - Options window: `/wp options`, the minimap button, or the WowPad button under the Esc menu.
 - Unmapped pads on Linux (8BitDo Ultimate 2, Steam Controller through Steam Input) are detected.
 
-## Install into a benilla checkout
+## Install
+
+You need a benilla checkout (`git clone https://github.com/samwhosung/benilla`, or any fork of it)
+and Rust (https://rustup.rs). Then, from anywhere:
 
 ```sh
-cd path/to/benilla
-git clone https://github.com/Oddity-git/benilla-wowpad crates/benilla-wowpad
-git apply -3 crates/benilla-wowpad/patches/benilla-engine.patch
-cargo build --release -p benilla-wowpad
+git clone https://github.com/Oddity-git/benilla-wowpad
+bash benilla-wowpad/install.sh path/to/benilla
 ```
 
-benilla's workspace takes every folder under `crates/`, so nothing else needs registering.
+That copies WowPad into `crates/benilla-wowpad`, applies its engine patches and builds. To update
+later, pull either side (`git -C benilla-wowpad pull`, or a benilla update) and run the same line
+again: patches already in are skipped, so it is safe to run any number of times.
 
-`patches/benilla-engine.patch` is the small engine change WowPad needs: X interacts with the
-target the way a right-click on it would (and loots it all), and action slots 121-256 are
-client-only, so the controller bar has slots of its own that never touch your normal action bars.
-It was made against benilla `main`; `-3` merges it where benilla has moved on.
+**How the patches work.** `patches/` holds WowPad's small engine changes as a numbered series,
+applied in order like a load order: `00-soft-interact` (X interacts with the target the way a
+right-click on it would, and loots it all) and `01-client-action-slots` (action slots 121-256 are
+client-only, so the controller bar has slots of its own that never touch your normal bars). Each
+one is applied the first way that fits: as is, then by a three-way merge, then hunk by hunk by its
+nearest lines (for forks that changed the code around it). One that fits no way stops the
+installer, which names the files and changes nothing after it. A daily check
+(`.github/workflows/upstream.yml`) installs onto the newest benilla `main` and builds, so a patch
+that stops fitting gets refreshed here.
 
-Already applied an older `benilla-engine.patch`? Apply only the newer pieces under
-`patches/updates/`, in order (`git apply -3 crates/benilla-wowpad/patches/updates/01-client-action-slots.patch`).
+Other options: `--no-build`, `--patches-only` (for your own update scripts), `--remove` (takes the
+patches back out and deletes the crate). Forks with the ragdoll physics get its feature switched on
+automatically; other cargo features go in `WOWPAD_FEATURES="a,b"`.
 
-On a benilla fork with the ragdoll physics, add its feature:
-
-```sh
-cargo build --release -p benilla-wowpad --features benilla-app/ragdoll
-```
+`patches/updates/` is kept for update scripts written before the installer; new installs ignore it.
 
 ## Run
 

@@ -1,0 +1,44 @@
+# Every day (and on every push): install WowPad onto the newest benilla main with install.sh and
+# check that it builds, so a benilla change that breaks a patch shows up here before players hit it.
+name: newest benilla
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: WowPad
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: wowpad
+      - name: benilla main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: samwhosung/benilla
+          ref: main
+          path: benilla
+      - name: Install onto benilla
+        run: bash wowpad/install.sh --no-build benilla
+      - name: System libraries
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq pkg-config libasound2-dev libudev-dev
+      - name: Rust toolchain
+        working-directory: benilla
+        run: rustup toolchain install && rustc -V
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: benilla
+      - name: Check
+        working-directory: benilla
+        run: cargo check -p benilla-wowpad
+      - name: WowPad tests
+        working-directory: benilla
+        run: cargo test -p benilla-wowpad
+      - name: Engine slot test
+        working-directory: benilla
+        run: cargo test -p benilla-ui --lib client_action
