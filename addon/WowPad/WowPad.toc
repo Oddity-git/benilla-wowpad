@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: WowPad
 ## Notes: Native-feel controller support, ported from WowPad 1.4.2 (3.3.5) to benilla. Needs benilla-wowpad.
-## Version: 1.4.2-benilla
+## Version: 0.1.0
 ## SavedVariables: WowPadDB
 ## SavedVariablesPerCharacter: WowPadCharDB
 Signals.lua

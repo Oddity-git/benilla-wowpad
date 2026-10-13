@@ -8,11 +8,13 @@ local WP = WowPad
 
 -- Newest first. Shown on the last page.
 local WHATS_NEW = {
-  { "1.4.2-benilla", {
+  { "0.1.0", {
+    "First release on benilla, ported from WowPad 1.4.2 (3.3.5)",
     "The controller bar has its own slots: your action bars stay as they are with WowPad off",
     "On-screen keyboard for chat and text fields ({Back} + {A}, or {A} on a text field)",
-    "Controller Map ({Start} > page 2), party highlight in healer mode, this window",
-    "Swap X / Y option for pads that report them backwards; centred cooldown sweeps",
+    "Window tabs on {LB} / {RB}, quest tracking on {X}, {B} closes the window you're on",
+    "Lite bar: cooldowns on the sets you can't see, in a small movable row",
+    "Controller Map ({Start} > page 2), party highlight in healer mode, Swap X / Y option",
   } },
 }
 
