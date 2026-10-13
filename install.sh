@@ -6,7 +6,7 @@
 #   bash install.sh --patches-only [path]  only bring the engine patches in (for update scripts)
 #   bash install.sh --remove [path]        take WowPad's engine patches back out and delete the crate
 #
-# Safe to run again after every benilla update, and on forks (physics, graphics...): it copies
+# Safe to run again after every benilla update, and on forks of it: it copies
 # this folder to crates/benilla-wowpad, then applies the engine patches in patches/ in their
 # numbered order, like a load order. A patch already in is skipped; one that no longer fits stops
 # the run and names the files, and nothing after it is touched.
@@ -145,10 +145,6 @@ done
 
 command -v cargo >/dev/null || stop "cargo is not installed (https://rustup.rs), so WowPad can't be built"
 FEATURES="${WOWPAD_FEATURES:-}"
-# Forks that need their own feature switched on for the full game.
-if grep -qE '^ragdoll[[:space:]]*=' "$ROOT/crates/benilla-app/Cargo.toml"; then
-    FEATURES="${FEATURES:+$FEATURES,}benilla-app/ragdoll"
-fi
 say "Building (cargo build --release -p benilla-wowpad${FEATURES:+ --features $FEATURES})"
 (cd "$ROOT" && cargo build --release -p benilla-wowpad ${FEATURES:+--features "$FEATURES"}) ||
     stop "the build failed (the errors are above)"

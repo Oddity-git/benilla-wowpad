@@ -46,8 +46,8 @@ installer, which names the files and changes nothing after it. A daily check
 that stops fitting gets refreshed here.
 
 Other options: `--no-build`, `--patches-only` (for your own update scripts), `--remove` (takes the
-patches back out and deletes the crate). Forks with the ragdoll physics get its feature switched on
-automatically; other cargo features go in `WOWPAD_FEATURES="a,b"`.
+patches back out and deletes the crate). Extra cargo features for your benilla build go in
+`WOWPAD_FEATURES="a,b"`.
 
 `patches/updates/` is kept for update scripts written before the installer; new installs ignore it.
 
