@@ -109,6 +109,10 @@ if [ "$REMOVE" = 1 ]; then
         name="$(basename "$p" .patch)"
         if (cd "$ROOT" && git apply --reverse --check "$p" 2>/dev/null); then
             (cd "$ROOT" && git apply --reverse "$p") && echo "  $name: removed"
+        elif command -v patch >/dev/null &&
+            (cd "$ROOT" && patch --dry-run -R -p1 -F3 -s < "$p" >/dev/null 2>&1); then
+            (cd "$ROOT" && patch -R -p1 -F3 -s --no-backup-if-mismatch < "$p") &&
+                echo "  $name: removed (placed by nearby lines)"
         else
             echo "  $name: not in cleanly, left alone (git checkout the files it touches to undo)"
         fi

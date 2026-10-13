@@ -1,5 +1,6 @@
-# Every day (and on every push): install WowPad onto the newest benilla main with install.sh and
-# check that it builds, so a benilla change that breaks a patch shows up here before players hit it.
+# Every day (and on every push): install WowPad onto the newest benilla main with install.sh (Linux)
+# and install.ps1 (Windows) and check that it builds, so a benilla change that breaks a patch shows
+# up here before players hit it.
 name: newest benilla
 
 on:
@@ -42,3 +43,32 @@ jobs:
       - name: Engine slot test
         working-directory: benilla
         run: cargo test -p benilla-ui --lib client_action
+
+  install-windows:
+    runs-on: windows-latest
+    steps:
+      - name: WowPad
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: wowpad
+      - name: benilla main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: samwhosung/benilla
+          ref: main
+          path: benilla
+      - name: Install onto benilla (install.ps1)
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File wowpad\install.ps1 benilla -NoBuild
+      - name: Rust toolchain
+        working-directory: benilla
+        run: rustup toolchain install && rustc -V
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: benilla
+      - name: Check
+        working-directory: benilla
+        run: cargo check -p benilla-wowpad
+      - name: WowPad tests
+        working-directory: benilla
+        run: cargo test -p benilla-wowpad

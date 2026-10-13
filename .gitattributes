@@ -1,0 +1,5 @@
+# Patches and the shell installer keep LF line ends on every platform (Git for Windows would
+# otherwise rewrite them, and a patch with CRLF lines no longer applies).
+*.patch -text
+*.sh text eol=lf
+*.ps1 text eol=crlf
