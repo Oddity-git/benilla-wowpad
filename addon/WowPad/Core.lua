@@ -701,6 +701,44 @@ local function CloseButtonOf(root)
   return nil
 end
 
+-- The quest window starts on what moves the quest along: Accept, Continue, Complete (the first
+-- reward when there is a choice to make), else the first quest in a greeting's list.
+local function QuestStart()
+  local choice = GetNumQuestChoices and GetNumQuestChoices() > 1 and QuestRewardItem1
+  return { QuestFrameAcceptButton, QuestFrameCompleteButton, choice, QuestFrameCompleteQuestButton,
+           QuestTitleButton1 }
+end
+
+-- An NPC's gossip starts on its first quest (one to pick up, then one to turn in), else its first
+-- option.
+local function GossipStart()
+  local list = {}
+  for _, kind in ipairs({ "Available", "Active" }) do
+    for i = 1, (NUMGOSSIPBUTTONS or 32) do
+      local b = getglobal("GossipTitleButton" .. i)
+      if b and b:IsVisible() and b.type == kind then table.insert(list, b); break end
+    end
+  end
+  table.insert(list, GossipTitleButton1)
+  return list
+end
+
+-- Bags start on the first slot: the top-left item slot, in the backpack when it is open.
+local function BagStart(nodes)
+  local slots, pack = {}, {}
+  for i = 1, table.getn(nodes) do
+    local n = nodes[i]
+    local name = n:GetName() or ""
+    local w, h = n:GetWidth(), n:GetHeight()
+    if string.find(name, "Item%d+$") or (w >= 30 and w <= 48 and math.abs(w - h) < 2) then
+      table.insert(slots, n)
+      local bag = n:GetParent()
+      if bag and IsBags(bag) and bag:GetID() == 0 then table.insert(pack, n) end
+    end
+  end
+  return { DefaultNode(table.getn(pack) > 0 and pack or slots) }
+end
+
 -- Collect the roots, nodes and lists; keep the selection and refresh the boxes and hints.
 function Nav.Refresh()
   Nav.roots = CollectRoots()
@@ -739,8 +777,9 @@ function Nav.Refresh()
   Nav.lastMX, Nav.lastMY = mx, my
 
   if not Nav.cur or not Nav.nodeSet[Nav.cur] then
-    -- Back to where this window was: the same node, else the nearest one.
-    local mem = Nav.root and Nav.memory[Nav.root]
+    -- Back to where this window was: the same node, else the nearest one. Not the quest window:
+    -- its pages (greeting, details, progress, reward) swap in place and each has its own start.
+    local mem = Nav.root and Nav.root ~= QuestFrame and Nav.memory[Nav.root]
     if mem then
       local pick = Nav.nodeSet[mem.node] and mem.node
       if not pick and mem.x then
@@ -762,6 +801,10 @@ function Nav.Refresh()
     elseif rn == "WowPadKeyboard" then pref = { WP.Keyboard.firstKey }
     elseif rn == "WowPadFirstTime" then pref = { getglobal("WowPadFirstTimeNext") }
     elseif rn == "WowPadInfo" then pref = { getglobal("WowPadInfoCloseButton") }
+    elseif rn == "WorldMapFrame" then pref = { WorldMapButton }   -- the middle of the map
+    elseif rn == "QuestFrame" then pref = QuestStart()
+    elseif rn == "GossipFrame" then pref = GossipStart()
+    elseif IsBags(Nav.root) or BagLike(Nav.root) then pref = BagStart(nodes)
     elseif rn and string.find(rn, "^GroupLootFrame%d") then
       -- Need if allowed, else Greed (disabled buttons aren't nodes).
       pref = { getglobal(rn .. "RollButton"), getglobal(rn .. "GreedButton") }

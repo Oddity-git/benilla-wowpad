@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Windows open on a sensible spot: the map in its middle, quest windows on Accept / Complete or
+  the first quest, bags on the first slot.
 - `/wp save` saves your settings without logging out (it reloads the UI).
 - The X icon, the crosshair dot and the centre-line snap now follow the UI scale setting.
 - Crosshair tooltips also work on what you are fighting.
