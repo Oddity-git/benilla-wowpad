@@ -97,8 +97,10 @@ What it does differently from the manual steps:
 - A patch that is already in is skipped.
 - `--no-build`, `--patches-only` (for your own update scripts) and `--remove` (takes the patches
   back out and deletes the crate); in PowerShell `-NoBuild`, `-PatchesOnly`, `-Remove`.
-- Extra cargo features for your benilla build go in `WOWPAD_FEATURES="a,b"`
-  (`$env:WOWPAD_FEATURES="a,b"` in PowerShell).
+- It builds with the same features your benilla's own game builds with by default, so a fork's
+  extras stay in. (By hand: add `--features benilla-app/<name>` for each.) More go in
+  `WOWPAD_FEATURES="a,b"` (`$env:WOWPAD_FEATURES="a,b"` in PowerShell).
+- A WowPad folder already inside `crates/` (cloned or linked there) is used as it is.
 
 ### What the patches change
 

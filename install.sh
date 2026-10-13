@@ -14,7 +14,7 @@
 # Extra cargo features: WOWPAD_FEATURES="feat1,feat2" bash install.sh
 
 set -u
-SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 BUILD=1 PATCHES_ONLY=0 REMOVE=0 ROOT=""
 for a in "$@"; do
     case "$a" in
@@ -77,6 +77,8 @@ is_benilla "$ROOT" ||
     stop "$ROOT is not a benilla checkout (no crates/benilla-app). Pick the benilla folder itself."
 command -v git >/dev/null || stop "git is not installed"
 DEST="$ROOT/crates/benilla-wowpad"
+# WowPad already there as this very folder (cloned or linked into crates/): use it as it is.
+[ "$(cd "$DEST" 2>/dev/null && pwd -P)" = "$SRC" ] && DEST="$SRC"
 IS_REPO=0
 git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 && IS_REPO=1
 
@@ -188,6 +190,18 @@ done
 
 command -v cargo >/dev/null || stop "cargo is not installed (https://rustup.rs), so WowPad can't be built"
 FEATURES="${WOWPAD_FEATURES:-}"
+# Build what the checkout's own game builds by default: every feature the benilla launcher turns on
+# by default (a fork's extras included) that reaches benilla-app goes on here too.
+launcher="$ROOT/crates/benilla/Cargo.toml"
+if [ -f "$launcher" ]; then
+    defaults="$(sed -n 's/^default[[:space:]]*=[[:space:]]*\[\(.*\)\].*/\1/p' "$launcher" | tr -d '" ' | tr ',' ' ')"
+    for f in $defaults; do
+        [ "$f" = dev ] && continue   # WowPad's own default already carries it
+        for app in $(grep -E "^$f[[:space:]]*=" "$launcher" | grep -oE '"benilla-app/[A-Za-z0-9_-]+"' | tr -d '"'); do
+            case ",$FEATURES," in *",$app,"*) ;; *) FEATURES="${FEATURES:+$FEATURES,}$app" ;; esac
+        done
+    done
+fi
 say "Building (cargo build --release -p benilla-wowpad${FEATURES:+ --features $FEATURES})"
 (cd "$ROOT" && cargo build --release -p benilla-wowpad ${FEATURES:+--features "$FEATURES"}) ||
     stop "the build failed (the errors are above)"

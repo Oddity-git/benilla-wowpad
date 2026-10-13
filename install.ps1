@@ -70,6 +70,14 @@ if (-not (Test-Path $patchExe)) {
     $patchExe = if ($patchCmd) { $patchCmd[0].Source } else { $null }
 }
 $Dest = Join-Path (Join-Path $Root "crates") "benilla-wowpad"
+# WowPad already there as this very folder (cloned or linked into crates\): use it as it is.
+function Real-Path($p) {
+    $item = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+    if (-not $item) { return $null }
+    if ($item.LinkType -and $item.Target) { return (Resolve-Path ($item.Target | Select-Object -First 1)).Path }
+    return $item.FullName
+}
+if ((Real-Path $Dest) -eq (Real-Path $Src)) { $Dest = $Src }
 
 # Run git (or patch) in the benilla folder; returns $true on success. Output is hidden unless asked.
 function Run($exe, [string[]]$argv, [switch]$Show) {
@@ -197,8 +205,29 @@ if ($NoBuild -or $PatchesOnly) { Write-Host ""; Write-Host "Done (no build)."; e
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     Stop-Install "cargo is not installed (https://rustup.rs), so WowPad can't be built"
 }
+$features = @()
+if ($env:WOWPAD_FEATURES) { $features += $env:WOWPAD_FEATURES -split "," }
+# Build what the checkout's own game builds by default: every feature the benilla launcher turns on
+# by default (a fork's extras included) that reaches benilla-app goes on here too.
+$launcher = Join-Path (Join-Path (Join-Path $Root "crates") "benilla") "Cargo.toml"
+if (Test-Path $launcher) {
+    $toml = Get-Content $launcher
+    $def = $toml | Where-Object { $_ -match '^default\s*=\s*\[(.*)\]' } | Select-Object -First 1
+    if ($def -and ($def -match '\[(.*)\]')) {
+        foreach ($f in (($Matches[1] -replace '[" ]', '') -split ',')) {
+            if (-not $f -or $f -eq "dev") { continue }
+            $line = $toml | Where-Object { $_ -match "^$([regex]::Escape($f))\s*=" } | Select-Object -First 1
+            if ($line) {
+                foreach ($m in [regex]::Matches($line, '"(benilla-app/[A-Za-z0-9_-]+)"')) {
+                    $app = $m.Groups[1].Value
+                    if ($features -notcontains $app) { $features += $app }
+                }
+            }
+        }
+    }
+}
 $cargoArgs = @("build", "--release", "-p", "benilla-wowpad")
-if ($env:WOWPAD_FEATURES) { $cargoArgs += @("--features", $env:WOWPAD_FEATURES) }
+if ($features.Count -gt 0) { $cargoArgs += @("--features", ($features -join ",")) }
 Say "Building (cargo $($cargoArgs -join ' '))"
 Push-Location $Root
 & cargo @cargoArgs
