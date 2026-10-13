@@ -599,6 +599,8 @@ function Nav.Refresh()
     elseif rn == "WowPadKeyboard" then pref = { WP.Keyboard.firstKey }
     elseif rn == "WowPadFirstTime" then pref = { getglobal("WowPadFirstTimeNext") }
     elseif rn == "WowPadInfo" then pref = { getglobal("WowPadInfoCloseButton") }
+    elseif rn and string.find(rn, "^StaticPopup%d$") and Nav.root.which == "WOWPAD_DESTROY" then
+      pref = { getglobal(rn .. "Button2") }   -- Cancel, so a double press never destroys
     end
     local pick
     for i = 1, table.getn(pref or {}) do
