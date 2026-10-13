@@ -197,6 +197,8 @@ function Nav.CompareDown()
   Nav.compare.lastTry = 0
   Nav.compare.confirms = 0
   Nav.compare.confirmAt = 0
+  Nav.compare.lostSaid = false
+  Nav.compare.geoSaid = false
 end
 function Nav.CompareUp()
   local c = Nav.compare
@@ -211,8 +213,15 @@ function Nav.CompareUp()
 end
 
 -- Retry while held (so a template that arrives late still compares), then re-assert the plate a
--- couple of times: benilla sometimes lays a reused tooltip out blank on the first pass.
-local cmpDriver = CreateFrame("Frame")
+-- couple of times: benilla sometimes lays a reused tooltip out blank on the first pass. Newer
+-- benilla also takes the plate down again when the bag hover re-seats GameTooltip, so while Y is
+-- held a plate that went away is put back. In the top stratum, this runs after the bag buttons'
+-- own OnUpdate each frame.
+local cmpDriver = CreateFrame("Frame", nil, UIParent)
+cmpDriver:SetFrameStrata("TOOLTIP")
+cmpDriver:SetWidth(1)
+cmpDriver:SetHeight(1)
+cmpDriver:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
 cmpDriver:SetScript("OnUpdate", function()
   local c = Nav.compare
   if c.held and (GetTime() - c.since) >= c.hold then c.armed = true end
@@ -225,10 +234,23 @@ cmpDriver:SetScript("OnUpdate", function()
       c.lastTry = GetTime()
       Nav.StartCompare()
     end
+  elseif not (Plate(1) and Plate(1):IsVisible()) then
+    if WowPadDB and WowPadDB.debug and not c.lostSaid then
+      c.lostSaid = true
+      WP.Print("compare: plate went away, putting it back")
+    end
+    Nav.StartCompare()
   elseif (c.confirms or 0) < 2 and GetTime() >= (c.confirmAt or 0) then
     c.confirms = (c.confirms or 0) + 1
     c.confirmAt = GetTime() + 0.15
     Nav.StartCompare()
+  elseif WowPadDB and WowPadDB.debug and not c.geoSaid then
+    c.geoSaid = true
+    local tt = Plate(1)
+    WP.Print("compare plate 1 at " .. tostring(tt:GetLeft()) .. "," .. tostring(tt:GetTop())
+      .. " size " .. tostring(tt:GetWidth()) .. "x" .. tostring(tt:GetHeight())
+      .. " visible=" .. tostring(tt:IsVisible()) .. " strata=" .. tostring(tt:GetFrameStrata())
+      .. " tooltip visible=" .. tostring(GameTooltip:IsVisible()))
   end
 end)
 
