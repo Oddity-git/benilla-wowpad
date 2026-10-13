@@ -7,7 +7,7 @@
 
 local WP = WowPad
 
-local W, H = 560, 476
+local W, H = 560, 500
 local F = CreateFrame("Frame", "WowPadOptionsFrame", UIParent)
 F:SetWidth(W)
 F:SetHeight(H)
@@ -221,18 +221,22 @@ Check("WowPadOptLite", "Lite bar (one set at a time)",
   "One cluster: your default set, and holding LT, RT or both shows that set in its place.",
   R, -298, function() return DB().barLite == true end,
   function(v) if WP.Bar then WP.Bar.SetLite(v) end end)
+Check("WowPadOptLiteCD", "Lite: show hidden cooldowns",
+  "With the lite bar, a row of the cooldowns on the sets you cannot see; each goes when it is ready. Move it in the bar layout editor.",
+  R, -322, function() return DB().liteCooldowns ~= false end,
+  function(v) DB().liteCooldowns = v; if WP.LiteCD then WP.LiteCD.Update() end end)
 Check("WowPadOptBlizz", "Hide Blizzard action bars",
   "Hides the stock bars and art; WowPad's XP, reputation and pet bars take their place.",
-  R, -322, function() return DB().hideBlizz == true end,
+  R, -346, function() return DB().hideBlizz == true end,
   function(v) if (DB().hideBlizz == true) ~= v then WP.ToggleBlizzBars() end end)
 Check("WowPadOptMinimap", "Minimap button", "Left-click: edit the bar layout. Right-click: these options.",
-  R, -346, function() return not (DB().minimap and DB().minimap.hide) end,
+  R, -370, function() return not (DB().minimap and DB().minimap.hide) end,
   function(v)
     DB().minimap = DB().minimap or {}
     DB().minimap.hide = not v
     if WP.UpdateMinimapButton then WP.UpdateMinimapButton() end
   end)
-Stepper("WowPadOptScale", "Bar size", R, -374,
+Stepper("WowPadOptScale", "Bar size", R, -398,
   { min = 0.4, max = 1.6, step = 0.05, fmt = X,
     get = function() return (WP.Bar and WP.Bar.Pos().scale) or 1 end,
     set = function(v) if WP.Bar then WP.Bar.SetScale(v) end end })
@@ -240,7 +244,7 @@ Stepper("WowPadOptScale", "Bar size", R, -374,
 local edit = CreateFrame("Button", "WowPadOptEdit", F, "UIPanelButtonTemplate")
 edit:SetWidth(150)
 edit:SetHeight(22)
-edit:SetPoint("TOPLEFT", F, "TOPLEFT", R, -404)
+edit:SetPoint("TOPLEFT", F, "TOPLEFT", R, -428)
 edit:SetText("Edit bar layout")
 edit:SetScript("OnClick", function()
   F:Hide()

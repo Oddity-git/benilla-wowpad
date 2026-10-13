@@ -174,8 +174,16 @@ local function Restore()
   if not WowPadCharDB.barsVersion then Migrate() end
   local bars = WowPadCharDB.bars or {}
   for id = OWN_FIRST, OWN_LAST do
+    -- A slot the client already holds as saved is left alone: the client keeps the slots for the
+    -- whole session (an addon reload, or WowPad turned off and on), and writing one again drops
+    -- its icon, which the client does not send back for a slot it thinks is unchanged.
     local a = bars[id]
-    if a then SetClientAction(id, a[1], a[2]) else SetClientAction(id) end
+    local kind, action = GetClientAction(id)
+    if a then
+      if kind ~= a[1] or action ~= a[2] then SetClientAction(id, a[1], a[2]) end
+    elseif kind then
+      SetClientAction(id)
+    end
   end
   restored = true
 end
@@ -310,6 +318,13 @@ local function UpdateClusters()
   local lite = WowPadDB and WowPadDB.barLite
   local view = Bar.editing and liteView or math.max(WP.set or 0, 0)
   for s, c in pairs(clusters) do Shown(c, not lite or s == view) end
+  if WP.LiteCD then WP.LiteCD.Update() end
+end
+
+-- The set the lite bar shows now, or nil when the bar is full or hidden.
+function Bar.LiteView()
+  if not bar or not bar:IsVisible() or not (WowPadDB and WowPadDB.barLite) then return nil end
+  return Bar.editing and liteView or math.max(WP.set or 0, 0)
 end
 
 function Bar.HighlightSet(set)
@@ -510,6 +525,7 @@ function Bar.SetEditing(on)
   if WP.RadialSetEditing then WP.RadialSetEditing(Bar.editing) end
   if WP.Ring and WP.Ring.SetEditing then WP.Ring.SetEditing(Bar.editing) end
   if WP.Extra then WP.Extra.SetEditing(Bar.editing) end
+  if WP.LiteCD then WP.LiteCD.SetEditing(Bar.editing) end
   UpdateTabs()
   Bar.UpdateVisibility()
   if Bar.editing then

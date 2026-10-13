@@ -12,6 +12,7 @@ Snap.lua
 Keyboard.lua
 UnitMenu.lua
 ActionBar.lua
+LiteCooldowns.lua
 Radial.lua
 Info.lua
 BlizzBars.lua
