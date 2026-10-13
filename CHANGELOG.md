@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- Interact prompt: **X Talk / Loot / Use** shows when something X can use is in reach, and X
-  uses it without changing your target.
+- Interact prompt: an X icon shows over what X would use when it is in reach, and X uses it
+  without changing your target.
 - WowPad no longer patches benilla's interact code: it uses benilla's own API for it, so only
   one engine patch is left.
 - LT / RT and LB / RB swap windows by where they sit on screen, and stop at the last one.

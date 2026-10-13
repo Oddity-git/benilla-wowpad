@@ -176,9 +176,9 @@ and the bar then show ✕ ○ □ △ and L1 / R1 / L2 / R2. Pads that report X 
 ### Interact prompt
 
 When something X can use is in reach (an NPC with a service, a corpse to loot or skin, a chest,
-herb, vein or mailbox), a prompt shows below the screen centre: **X Talk**, **X Loot**, **X Use**
-and so on. X then acts on it without targeting it, so your target stays yours. In a fight with
-a target, X stays on the target. Move the prompt in edit mode; `/wp prompt` turns it off.
+herb, vein or mailbox), an X icon shows over it. X then acts on it without targeting it, so your
+target stays yours. In a fight with a target, X stays on the target. `/wp prompt` turns the icon
+off.
 
 ### In menus (a window open, out of combat)
 

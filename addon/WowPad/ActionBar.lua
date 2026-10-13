@@ -522,7 +522,6 @@ function Bar.SetEditing(on)
   if WP.Ring and WP.Ring.SetEditing then WP.Ring.SetEditing(Bar.editing) end
   if WP.Extra then WP.Extra.SetEditing(Bar.editing) end
   if WP.LiteCD then WP.LiteCD.SetEditing(Bar.editing) end
-  if WP.Prompt then WP.Prompt.SetEditing(Bar.editing) end
   UpdateTabs()
   Bar.UpdateVisibility()
   if Bar.editing then

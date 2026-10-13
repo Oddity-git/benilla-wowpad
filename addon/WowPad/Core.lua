@@ -1245,7 +1245,7 @@ SlashCmdList["WOWPAD"] = function(msg)
     Print("Debug messages " .. (WowPadDB.debug and "on" or "off"))
   elseif cmd == "prompt" then
     WowPadDB.interactPrompt = not (WowPadDB.interactPrompt ~= false)
-    Print("Interact prompt (X Talk / Loot / Use): " .. ((WowPadDB.interactPrompt ~= false) and "on" or "off"))
+    Print("Interact prompt (X over what X would use): " .. ((WowPadDB.interactPrompt ~= false) and "on" or "off"))
     if WP.Prompt then WP.Prompt.Update() end
   elseif cmd == "xattack" then
     WowPadDB.xAttack = not WowPadDB.xAttack

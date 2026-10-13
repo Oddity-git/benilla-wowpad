@@ -4,7 +4,7 @@
 //!
 //! A few times a second [`scan`] picks the soft target, the thing X would use: a corpse to loot or
 //! skin, else the nearest NPC with a service or usable object ahead of the camera. The addon shows
-//! it as a prompt ("X Talk"). X acts on the soft target when there is one, else on the target.
+//! it as an X icon over the thing. X acts on the soft target when there is one, else on the target.
 //! In a fight with a target there is no soft target, so X stays on the target.
 
 use benilla_app::{Interact, ObjectFields, ObjectType, Objects};
@@ -141,6 +141,8 @@ pub fn pick(
 pub struct Soft {
     pub pick: Option<(Entity, u64, Verb)>,
     shown: Option<Verb>,
+    /// Where the addon was last told the prompt goes.
+    at: Option<Vec2>,
     since: f32,
     /// The corpse X last used, ranked first while it stays lootable.
     last: Option<u64>,
@@ -151,10 +153,43 @@ pub struct Soft {
 pub struct World<'w, 's> {
     objects: Objects<'w, 's>,
     transforms: Query<'w, 's, &'static Transform>,
-    camera: Query<'w, 's, &'static GlobalTransform, With<WorldCamera>>,
+    camera: Query<'w, 's, (&'static Camera, &'static GlobalTransform), With<WorldCamera>>,
+    places: Query<'w, 's, &'static GlobalTransform>,
 }
 
 impl World<'_, '_> {
+    /// The camera the world renders through (the active one: off-screen booths have their own).
+    fn view(&self) -> Option<(&Camera, &GlobalTransform)> {
+        self.camera.iter().find(|(c, _)| c.is_active)
+    }
+
+    /// Where the prompt goes for `entity`: a little above it on screen, as fractions of the
+    /// viewport from its top-left corner. `None` behind the camera or off screen.
+    fn prompt_at(&self, entity: Entity, verb: Verb) -> Option<Vec2> {
+        let (camera, cam) = self.view()?;
+        let at = self.places.get(entity).ok()?.translation();
+        // A standing NPC's head height, a lying corpse's, or an object's top, roughly; the scale
+        // field grows them for big models.
+        let scale = self
+            .objects
+            .iter()
+            .find(|(_, e, _)| *e == entity)
+            .and_then(|(_, _, f)| f.object_scale_x())
+            .filter(|s| *s > 0.0)
+            .unwrap_or(1.0);
+        let up = match verb {
+            Verb::Talk => 2.4,
+            Verb::Loot | Verb::Skin => 0.9,
+            _ => 1.4,
+        } * scale;
+        let size = camera.logical_viewport_size()?;
+        let p = camera.world_to_viewport(cam, at + Vec3::Y * up).ok()?;
+        if p.x < 0.0 || p.y < 0.0 || p.x > size.x || p.y > size.y {
+            return None;
+        }
+        Some(p / size)
+    }
+
     fn soft(&self, last: Option<u64>) -> Option<(Entity, u64, Verb)> {
         let me = self.objects.player()?;
         // In a fight with a target, X stays on the target: a guard or vendor in reach must not
@@ -165,10 +200,8 @@ impl World<'_, '_> {
         }
         let at = self.transforms.get(me).ok()?.translation;
         let ahead = self
-            .camera
-            .single()
-            .ok()
-            .map(|c| {
+            .view()
+            .map(|(_, c)| {
                 let f = c.forward().as_vec3();
                 Vec2::new(f.x, f.z).normalize_or_zero()
             })
@@ -204,16 +237,32 @@ pub fn scan(
     world: World,
     mut soft: ResMut<Soft>,
 ) {
-    soft.since += time.delta_secs();
-    if soft.since < SCAN_EVERY {
-        return;
-    }
-    soft.since = 0.0;
     let Some(script) = script else { return };
-    let in_world = script
-        .eval::<bool>("return UIParent ~= nil")
-        .unwrap_or(false);
-    soft.pick = if in_world { world.soft(soft.last) } else { None };
+    soft.since += time.delta_secs();
+    if soft.since >= SCAN_EVERY {
+        soft.since = 0.0;
+        let in_world = script
+            .eval::<bool>("return UIParent ~= nil")
+            .unwrap_or(false);
+        soft.pick = if in_world { world.soft(soft.last) } else { None };
+    }
+    // Every frame, so the icon rides the object as the camera turns.
+    let at = soft
+        .pick
+        .and_then(|(entity, _, verb)| world.prompt_at(entity, verb));
+    let moved = match (at, soft.at) {
+        (Some(a), Some(b)) => a.distance(b) > 0.0005,
+        (a, b) => a.is_some() != b.is_some(),
+    };
+    if moved {
+        soft.at = at;
+        let args = at.map_or("nil".to_string(), |p| format!("{}, {}", p.x, p.y));
+        if let Err(e) = script.run(&format!(
+            "if WowPad_InteractPromptAt then WowPad_InteractPromptAt({args}) end"
+        )) {
+            warn!("wowpad: WowPad_InteractPromptAt failed: {e}");
+        }
+    }
     let verb = soft.pick.map(|(_, _, v)| v);
     if verb != soft.shown {
         soft.shown = verb;
