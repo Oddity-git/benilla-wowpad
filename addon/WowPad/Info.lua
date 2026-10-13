@@ -1,0 +1,87 @@
+-- Info.lua - the Controller Map window: what every button does (main menu, page 2 > Controller,
+-- or /wp map). Labels follow the LB / RB swap and healer mode. B closes. Ported from WowPad 1.4.2.
+
+local WP = WowPad
+
+local LEFT = {
+  { "Left stick",   "Move" },
+  { "L3",           "Autorun" },
+  { "LB",           "Target friendly" },
+  { "LB + RB",      "Right stick zooms" },
+  { "LB + R stick", "Healer mode (down / up)" },
+  { "LT (hold)",    "Left action set" },
+  { "LT + RT",      "Bottom action set" },
+  { "D-pad",        "Action slots" },
+  { "Back",         "Map (hold: bags)" },
+  { "Back+A / B",   "Keyboard / close" },
+}
+local RIGHT = {
+  { "Right stick",  "Camera / pointer" },
+  { "R3",           "Pointer mode" },
+  { "RB",           "Target hostile" },
+  { "RT (hold)",    "Right action set" },
+  { "A / B",        "Jump / Back" },
+  { "X / Y",        "Interact + attack / Target menu" },
+  { "Y in menus",   "Tap: preview, hold: compare" },
+  { "Start",        "Close windows + main menu" },
+  { "Back + Start", "Turn WowPad off / on" },
+}
+
+local F = CreateFrame("Frame", "WowPadInfo", UIParent)
+F:SetWidth(580)
+F:SetHeight(352)
+F:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
+F:SetFrameStrata("DIALOG")
+F:EnableMouse(true)
+F:SetBackdrop({
+  bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+  edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+  tile = true, tileSize = 32, edgeSize = 32,
+  insets = { left = 11, right = 12, top = 12, bottom = 11 },
+})
+F:Hide()
+table.insert(WP.overlays, F)
+table.insert(UISpecialFrames, "WowPadInfo")   -- Esc closes it
+
+local title = F:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+title:SetPoint("TOP", F, "TOP", 0, -20)
+title:SetText("Controller Map")
+
+-- One column of rows; keeps the font strings (by key label) so ShowInfo can relabel them.
+local valueText, keyText = {}, {}
+local function Column(list, x)
+  for i = 1, table.getn(list) do
+    local row = list[i]
+    local y = -64 - (i - 1) * 26
+    local k = F:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    WP.KeyText(k, row[1])           -- button names in the chosen style
+    k:SetPoint("LEFT", F, "TOPLEFT", x, y)
+    keyText[row[1]] = k
+    local v = F:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    v:SetPoint("LEFT", F, "TOPLEFT", x + 104, y)
+    v:SetText(row[2])
+    valueText[row[1]] = v
+  end
+end
+Column(LEFT, 30)
+Column(RIGHT, 300)
+
+local foot = F:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+foot:SetPoint("BOTTOM", F, "BOTTOM", 0, 18)
+WP.KeyText(foot, "Reopen from {Start} > page 2 > Controller.   {B} to close.", true)
+
+local close = CreateFrame("Button", "WowPadInfoCloseButton", F, "UIPanelCloseButton")
+close:SetPoint("TOPRIGHT", F, "TOPRIGHT", -6, -6)
+
+function WP.ShowInfo()
+  local swap = WowPadDB and WowPadDB.swapBumpers
+  if valueText.LB then valueText.LB:SetText(swap and "Target hostile" or "Target friendly") end
+  if valueText.RB then valueText.RB:SetText(swap and "Target friendly" or "Target hostile") end
+  if keyText["LB + R stick"] then
+    WP.KeyText(keyText["LB + R stick"], swap and "RB + R stick" or "LB + R stick")
+  end
+  local healer = WowPadDB and WowPadDB.wpBumperFlick == true
+  local ally = swap and valueText.RB or valueText.LB
+  if ally and healer then ally:SetText("Target last party pick") end
+  F:Show()
+end

@@ -268,8 +268,7 @@ local function BuildPet()
     b.icon:SetAllPoints(b)
     local ok, cd = pcall(CreateFrame, "Model", name .. "Cooldown", b, "CooldownFrameTemplate")
     if ok and cd then
-      cd:ClearAllPoints()
-      cd:SetAllPoints(b)
+      WP.FitCooldown(cd, b, PET_SIZE)
       b.cooldown = cd
     end
     b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")

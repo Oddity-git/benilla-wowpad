@@ -7,13 +7,19 @@
 --     Bottom  (LT+RT held)   bottom : 8 slots
 -- Lite mode shows a single cluster that switches to the held set.
 --
--- On 1.12 the slots are the game's own action slots, so what you put there is saved by the server
--- like any action bar and the stock bars show the same buttons:
---     Default D-pad  -> main bar 1-4     (paged with stance / stealth / forms, like the main bar)
---     Left set       -> main bar 5-12    (paged too)
---     Right set      -> right bar 1-8    (action slots 25-32)
---     Bottom set     -> right bar 2 1-8  (action slots 37-44)
---     Utility ring   -> bottom right bar 1-8 (action slots 49-56)
+-- The slots are WowPad's own: benilla-wowpad's engine patch adds client-only action slots
+-- (ids 121-256) that work like any action slot (icon, range, usable, cooldown, drag and drop) but
+-- never reach the server, so the stock bars keep their spells when WowPad is off. WowPad saves
+-- them per character (WowPadCharDB.bars):
+--     Default D-pad  -> 121-124, Left set -> 125-132 (both paged with stance / stealth / forms,
+--                       12 more slots per page, like the main bar: page n = 121 + 12n ...)
+--     Right set      -> 181-188
+--     Bottom set     -> 189-196
+--     Utility ring   -> 197-204
+-- The first time, each slot takes what its old stock slot held (see Migrate below). On a benilla
+-- without the patch the slots are the stock ones, as before:
+--     Default D-pad  -> main bar 1-4, Left set -> main bar 5-12 (paged), Right set -> 25-32,
+--     Bottom set -> 37-44, Utility ring -> 49-56.
 -- The bar's position and scale are account-wide (WowPadDB.bar).
 
 local WP = WowPad
@@ -55,6 +61,17 @@ local RING_ICON = "Interface\\Icons\\INV_Jewelry_Ring_03"
 local bar, clusters, slots = nil, {}, {}   -- slots["set_i"] = button
 Bar.editing = false
 
+-- The 1.12 cooldown sweep is a model drawn at a fixed size (made for the 36 x 36 action button)
+-- from its frame's bottom-left corner, so resizing the frame moves the sweep off centre instead
+-- of shrinking it. Keep the frame 36 x 36, centred, and scale it to the size wanted.
+function WP.FitCooldown(cd, parent, size)
+  cd:ClearAllPoints()
+  cd:SetWidth(36)
+  cd:SetHeight(36)
+  cd:SetScale(size / 36)
+  cd:SetPoint("CENTER", parent, "CENTER", 0, 0)
+end
+
 local function Key(set, i) return set .. "_" .. i end
 local function Shown(region, on) if on then region:Show() else region:Hide() end end
 
@@ -72,14 +89,123 @@ local function MainSlot(id)
   return id + (page - 1) * NUM_ACTIONBAR_BUTTONS
 end
 
-local function ActionSlot(set, i)
+-- The stock slot a pad slot used before WowPad had its own (and still uses without the patch).
+local function StockSlot(set, i)
   if set == 0 then return MainSlot(i) end
   if set == 1 then return MainSlot(4 + i) end
   if set == 2 then return 24 + i end
   if set == 3 then return 36 + i end
   return 48 + i   -- 9: the ring
 end
+
+local OWN = SetClientAction ~= nil and GetClientAction ~= nil
+local OWN_FIRST, OWN_LAST = 121, 204
+
+-- WowPad's own slot for a pad slot on stance page `page` (0 = none, as GetBonusBarOffset).
+local function OwnSlot(set, i, page)
+  if set == 0 or set == 1 then
+    local k = set == 0 and i or 4 + i
+    return 120 + (page or GetBonusBarOffset()) * 12 + k
+  end
+  if set == 2 then return 180 + i end
+  if set == 3 then return 188 + i end
+  return 196 + i
+end
+
+local function ActionSlot(set, i)
+  if OWN then return OwnSlot(set, i) end
+  return StockSlot(set, i)
+end
 Bar.ActionSlot = ActionSlot
+
+---------------------------------------------------------------------------
+-- Keeping the own slots: restored at login, saved on every change, and filled from the stock
+-- slots once per character.
+---------------------------------------------------------------------------
+local restored = false
+
+local function SaveSlot(id)
+  if not restored or id < OWN_FIRST or id > OWN_LAST then return end
+  local kind, action = GetClientAction(id)
+  WowPadCharDB.bars = WowPadCharDB.bars or {}
+  if kind and action then
+    WowPadCharDB.bars[id] = { kind, action }
+  else
+    WowPadCharDB.bars[id] = nil
+  end
+end
+
+-- Each own slot, with the stock slot it takes over the first time.
+local function EachOwnSlot(fn)
+  for page = 0, 4 do
+    for k = 1, 12 do
+      local stock = page == 0 and k or (NUM_ACTIONBAR_PAGES + page - 1) * NUM_ACTIONBAR_BUTTONS + k
+      fn(120 + page * 12 + k, stock)
+    end
+  end
+  for i = 1, 8 do
+    fn(180 + i, 24 + i)
+    fn(188 + i, 36 + i)
+    fn(196 + i, 48 + i)
+  end
+end
+
+-- First time on this character: copy what the stock slots WowPad used held. The stock bar keeps
+-- them too; from here on the two are separate.
+local function Migrate()
+  WowPadCharDB.bars = {}
+  local n = 0
+  EachOwnSlot(function(own, stock)
+    local kind, action = GetClientAction(stock)
+    if kind and action then
+      WowPadCharDB.bars[own] = { kind, action }
+      n = n + 1
+    end
+  end)
+  WowPadCharDB.barsVersion = 1
+  if n > 0 then
+    DEFAULT_CHAT_FRAME:AddMessage("|cff33ccffWowPad|r: the controller bar now has its own slots. "
+      .. n .. " actions copied from your action bars, which WowPad no longer changes.")
+  end
+end
+
+local function Restore()
+  WowPadCharDB = WowPadCharDB or {}
+  if not WowPadCharDB.barsVersion then Migrate() end
+  local bars = WowPadCharDB.bars or {}
+  for id = OWN_FIRST, OWN_LAST do
+    local a = bars[id]
+    if a then SetClientAction(id, a[1], a[2]) else SetClientAction(id) end
+  end
+  restored = true
+end
+
+-- The stock bars arrive a moment after the world: restore once they have, or after a few seconds.
+local restoreWait
+local restorer = CreateFrame("Frame")
+restorer:Hide()
+restorer:SetScript("OnUpdate", function()
+  restoreWait = restoreWait - arg1
+  local stockIn = false
+  for id = 1, 120 do if HasAction(id) then stockIn = true break end end
+  if (stockIn and restoreWait < 2.5) or restoreWait <= 0 then
+    this:Hide()
+    Restore()
+    if Bar.UpdateAll then Bar.UpdateAll() end
+  end
+end)
+if OWN then
+  restorer:RegisterEvent("PLAYER_ENTERING_WORLD")
+  restorer:RegisterEvent("PLAYER_LOGOUT")
+  restorer:SetScript("OnEvent", function()
+    if event == "PLAYER_ENTERING_WORLD" and not restored then
+      restoreWait = 3
+      this:Show()
+    elseif event == "PLAYER_LOGOUT" and restored then
+      for id = OWN_FIRST, OWN_LAST do SaveSlot(id) end
+    end
+  end)
+end
 
 -- Which bar slot holds the ring button ("set_i"), from WowPadDB.wpRingSlot (set*10+i).
 function WP.RingSlotKey()
@@ -488,9 +614,7 @@ local function MakeSlot(c, set, i, x, y, noGlyph)
   -- The 1.12 cooldown sweep is a model; the ring hides its square corners.
   local ok, cd = pcall(CreateFrame, "Model", name .. "Cooldown", btn, "CooldownFrameTemplate")
   if ok and cd then
-    cd:ClearAllPoints()
-    cd:SetPoint("TOPLEFT", btn, "TOPLEFT", 3, -3)
-    cd:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -3, 3)
+    WP.FitCooldown(cd, btn, SIZE - 6)
     btn.cooldown = cd
   end
   Ring(btn)
@@ -596,6 +720,7 @@ local EVENTS = { "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BON
                  "PLAYER_LEAVE_COMBAT", "UPDATE_SHAPESHIFT_FORMS", "PLAYER_AURAS_CHANGED" }
 for k = 1, table.getn(EVENTS) do ev:RegisterEvent(EVENTS[k]) end
 ev:SetScript("OnEvent", function()
+  if OWN and event == "ACTIONBAR_SLOT_CHANGED" and arg1 then SaveSlot(arg1) end
   if not bar then return end
   if event == "ACTIONBAR_UPDATE_STATE" or event == "START_AUTOREPEAT_SPELL" or event == "STOP_AUTOREPEAT_SPELL"
       or event == "PLAYER_ENTER_COMBAT" or event == "PLAYER_LEAVE_COMBAT" then
@@ -622,7 +747,7 @@ end)
 ---------------------------------------------------------------------------
 -- Utility ring: hold the button on its bar slot, point the right stick at a wedge
 -- (benilla-wowpad reports which, RING_DIR_n), let go to use it. The 8 wedges are action slots
--- 49-56, so dragging, icons and cooldowns work like any slot.
+-- (WowPad's own 197-204), so dragging, icons and cooldowns work like any slot.
 ---------------------------------------------------------------------------
 local RING_R, RING_WHEEL, RING_ICON_SCALE = 120, 400, 44 / 32
 local R = {}

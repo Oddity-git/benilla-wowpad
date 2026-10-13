@@ -24,13 +24,19 @@ local PAGES = {
   },
   {
     { "Guild",          "Interface\\Icons\\INV_Shirt_GuildTabard_01",       function() ToggleFriendsFrame(3) end },
+    { "PvP",            "Interface\\Icons\\INV_BannerPVP_02",               function() ToggleCharacter("HonorFrame") end },
+    { "Controller",     "Interface\\Icons\\INV_Misc_QuestionMark",          function() WP.ShowInfo() end },
+    { "Welcome",        "Interface\\Icons\\INV_Misc_Book_11",               function() WP.ShowFirstTime(2) end },
     { "Macros",         "Interface\\Icons\\INV_Misc_Note_06",               function() if ShowMacroFrame then ShowMacroFrame() end end },
     { "Chat",           "Interface\\Icons\\Spell_Holy_PrayerOfSpirit",      function() ChatFrame_OpenChat("") end },
-    { "Help",           "Interface\\Icons\\INV_Misc_QuestionMark",          function() ToggleHelpFrame() end },
+    { "Help",           "Interface\\Icons\\INV_Misc_Note_02",               function() ToggleHelpFrame() end },
+    { "WowPad Options", "Interface\\Icons\\INV_Gizmo_02",                function() WP.OpenOptions() end },
+  },
+  {
     { "Edit Bar",       "Interface\\Icons\\Trade_Engineering",              function() WP.ToggleEdit() end },
     { "Blizzard Bars",  "Interface\\Icons\\INV_Misc_EngGizmos_01",          function() WP.ToggleBlizzBars() end },
     { "Crosshair",      "Interface\\Icons\\Ability_Hunter_SniperShot",      function() WP.ToggleCrosshair() end },
-    { "WowPad Options", "Interface\\Icons\\INV_Gizmo_02",                function() WP.OpenOptions() end },
+    { "Bar Visibility", "Interface\\Icons\\Spell_Shadow_DetectInvisibility", function() WP.Bar.ToggleAlways() end },
   },
 }
 local RADIUS, WEDGE = 120, 44     -- icon distance from the centre, icon size
@@ -216,6 +222,8 @@ end
 
 -- Start: close the open windows (like Escape), then open the wheel; with the wheel open, close it.
 function WP.StartPressed()
+  -- The keyboard open: Start sends the line (or presses Enter in its text field).
+  if WP.Keyboard and WP.Keyboard:IsShown() then WP.Keyboard.Send() return end
   local wasOpen = R:IsShown()
   for k = 1, table.getn(WP.overlays) do
     local o = WP.overlays[k]

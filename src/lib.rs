@@ -164,6 +164,8 @@ struct Mapper {
     screen_h: u32,
     announced: bool,
     glue: Vec<(GamepadButton, glue::GlueInput)>,
+    /// The edit box with the keyboard focus, as last told to the addon (`WowPad_EditFocus`).
+    edit_focus: Option<String>,
 }
 
 impl Default for Mapper {
@@ -212,6 +214,7 @@ impl Default for Mapper {
             screen_h: 0,
             announced: false,
             glue: Vec::new(),
+            edit_focus: None,
         }
     }
 }
@@ -485,6 +488,18 @@ fn drive(
             && m.click_held == [false; 2]
             && m.menu_click == [None; 8]);
     let typing = script.has_keyboard_focus();
+    // An edit box took the focus: in controller mode the addon swaps it for its on-screen keyboard.
+    let edit_focus = script.focused_editbox_name();
+    if edit_focus != m.edit_focus {
+        if let Some(name) = edit_focus.as_deref().filter(|_| m.controller && m.enabled) {
+            if let Err(e) = script.run(&format!(
+                "if WowPad_EditFocus then WowPad_EditFocus({name:?}) end"
+            )) {
+                warn!("wowpad: WowPad_EditFocus failed: {e}");
+            }
+        }
+        m.edit_focus = edit_focus;
+    }
     let mut io = Io {
         script: &script,
         cfg,

@@ -11,8 +11,10 @@ crate, running inside benilla, and the addon is ported to the 1.12 API. The bina
 
 - Console-style play on a gamepad: left stick moves, right stick turns the camera, four action
   sets on LT / RT / LT+RT, a utility ring, LB / RB targeting (healer mode cycles the party).
-- Its own controller bar on the real action slots, plus its own XP, reputation and pet bars when
-  the Blizzard bars are hidden.
+- Its own controller bar with its own action slots (range, usable and cooldown like any bar),
+  saved per character, plus its own XP, reputation and pet bars when the Blizzard bars are hidden.
+- An on-screen keyboard for chat (Back + A) and text fields, a Controller Map, a welcome window,
+  and a party highlight in healer mode.
 - Start opens a radial main menu; Y opens a target menu; the D-pad and A drive any window.
 - A drawn pointer for pointer mode (R3) and a crosshair with tooltips when the stick rests.
 - A world map cursor with coordinates.
@@ -31,8 +33,12 @@ cargo build --release -p benilla-wowpad
 benilla's workspace takes every folder under `crates/`, so nothing else needs registering.
 
 `patches/benilla-engine.patch` is the small engine change WowPad needs: X interacts with the
-target the way a right-click on it would (and loots it all). It was made against benilla `main`;
-`-3` merges it where benilla has moved on.
+target the way a right-click on it would (and loots it all), and action slots 121-256 are
+client-only, so the controller bar has slots of its own that never touch your normal action bars.
+It was made against benilla `main`; `-3` merges it where benilla has moved on.
+
+Already applied an older `benilla-engine.patch`? Apply only the newer pieces under
+`patches/updates/`, in order (`git apply -3 crates/benilla-wowpad/patches/updates/01-client-action-slots.patch`).
 
 On a benilla fork with the ragdoll physics, add its feature:
 

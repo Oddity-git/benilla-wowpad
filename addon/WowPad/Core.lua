@@ -596,6 +596,9 @@ function Nav.Refresh()
     local rn = Nav.root and Nav.root:GetName()
     if rn == "WowPadItemActions" then pref = { getglobal("WowPadItemActionsCancel") }
     elseif rn == "WowPadOptionsFrame" then pref = { getglobal("WowPadOptionsDone") }
+    elseif rn == "WowPadKeyboard" then pref = { WP.Keyboard.firstKey }
+    elseif rn == "WowPadFirstTime" then pref = { getglobal("WowPadFirstTimeNext") }
+    elseif rn == "WowPadInfo" then pref = { getglobal("WowPadInfoCloseButton") }
     end
     local pick
     for i = 1, table.getn(pref or {}) do
@@ -628,6 +631,8 @@ end)
 
 -- B: back out of the top window (a popup, a dropdown, then every window).
 function Nav.Back()
+  -- The keyboard: B deletes a letter (on an empty line it closes).
+  if WP.Keyboard and WP.Keyboard:IsShown() then WP.Keyboard.Delete() return end
   if WP.Radial and WP.Radial:IsVisible() then WP.Radial:Hide() return end
   if WP.UnitMenu and WP.UnitMenu:IsVisible() then WP.UnitMenu:Hide() return end
   for k = 1, table.getn(WP.overlays) do
@@ -684,6 +689,11 @@ local function SlotSignal(i, down)
   end
   if set == 0 and MenuContext() then
     if i == 8 then
+      -- The keyboard: Y types a space.
+      if WP.Keyboard and WP.Keyboard:IsShown() then
+        if down then WP.Keyboard.Space() end
+        return
+      end
       -- Y: tap previews, hold compares (ItemActions.lua).
       if down then
         if Nav.CompareDown then Nav.CompareDown() end
@@ -721,11 +731,22 @@ local function PartyStep(step)
   end
   WP.partyIndex = i
   TargetUnit(PartyUnit(i))
+  if WP.PartyFlicked then WP.PartyFlicked() end
 end
 
 local function Bumper(which)
   if WP.RadialBumper and WP.RadialBumper(which) then return end
   if MenuContext() then
+    -- The welcome window: LB / RB turn its pages.
+    if WP.FirstTime and WP.FirstTime:IsShown() then
+      WP.FirstTime.Page(which == "LB" and -1 or 1)
+      return
+    end
+    -- The chat keyboard: LB / RB pick the channel.
+    if WP.Keyboard and WP.Keyboard:IsShown() and not WP.Keyboard.IsField() then
+      WP.Keyboard.Page(which == "LB" and -1 or 1)
+      return
+    end
     if WP.Nav then WP.Nav.CycleRoot(which == "LB" and -1 or 1) end
     return
   end
@@ -1099,13 +1120,20 @@ SlashCmdList["WOWPAD"] = function(msg)
     if WP.Bar then WP.Bar.UpdateAll() end
   elseif cmd == "ps" or cmd == "xbox" then
     WP.SetButtonStyle(cmd == "ps" and "ps" or "xbox")
+  elseif cmd == "map" then
+    if WP.ShowInfo then WP.ShowInfo() end
+  elseif cmd == "firsttime" or cmd == "welcome" or cmd == "setup" then
+    if WP.ShowFirstTime then WP.ShowFirstTime(1) end
+  elseif cmd == "keyboard" then
+    WowPadDB.keyboard = (WowPadDB.keyboard == false)
+    Print("On-screen keyboard: " .. (WowPadDB.keyboard and "on" or "off"))
   elseif cmd == "status" then
     WowPadDB.showStatus = not WowPadDB.showStatus
     WP.UpdateStatus()
   else
     Print(string.format("mode=%s set=%s context=%s pointer=%s", WP.mode, tostring(WP.set),
       tostring(WP.context), tostring(WP.pointer)))
-    Print("/wp options | edit | bar | lite | blizz | castbar | compare | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
+    Print("/wp options | map | firsttime | keyboard | edit | bar | lite | blizz | castbar | compare | crosshair | peek | scale <0.4-1.6> | sens <x> | psens <x>"
           .. " | invert | smooth | walk | swap | healer | ring <set_slot|off> | xattack | xbox | ps | status | debug")
   end
 end
