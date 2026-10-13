@@ -1,5 +1,5 @@
 diff --git a/crates/benilla-app/src/target/hover.rs b/crates/benilla-app/src/target/hover.rs
-index a835ccfc..8515fad0 100644
+index a835ccfc..fb7e4294 100644
 --- a/crates/benilla-app/src/target/hover.rs
 +++ b/crates/benilla-app/src/target/hover.rs
 @@ -34,12 +34,13 @@ pub(super) fn update_pick_occlusion(
@@ -38,13 +38,14 @@ index a835ccfc..8515fad0 100644
      pointer_over_ui: Res<PointerOverUi>,
      occlusion: Res<PickOcclusion>,
      // The unit whose plate holds the hover after this frame's UI walk.
-@@ -249,14 +255,15 @@ pub(super) fn update_hover(
+@@ -249,14 +255,16 @@ pub(super) fn update_hover(
              return;
          }
      }
 -    if rig.is_looking() || pointer_over_ui.0 {
++    // The aim point is not the pointer: the UI under the parked pointer does not take it.
 +    let aim = look_point(&rig, look_aim.as_deref());
-+    if (rig.is_looking() && aim.is_none()) || pointer_over_ui.0 {
++    if aim.is_none() && (rig.is_looking() || pointer_over_ui.0) {
          *last_pick = None;
          return;
      }
@@ -56,7 +57,7 @@ index a835ccfc..8515fad0 100644
          return;
      };
      let Ok(ray) = camera.viewport_to_world(cam_tf, cursor) else {
-@@ -542,7 +549,7 @@ impl GoGateInputs<'_> {
+@@ -542,7 +550,7 @@ impl GoGateInputs<'_> {
  pub(super) fn update_hovered_object(
      camera: Query<(&Camera, &GlobalTransform), With<WorldCamera>>,
      window: Query<&Window, With<PrimaryWindow>>,
@@ -65,17 +66,17 @@ index a835ccfc..8515fad0 100644
      pointer_over_ui: Res<PointerOverUi>,
      occlusion: Res<PickOcclusion>,
      // The unit pick, earlier in the chain: a unit hover keeps the GameObject halo shut.
-@@ -585,7 +592,8 @@ pub(super) fn update_hovered_object(
+@@ -585,7 +593,8 @@ pub(super) fn update_hovered_object(
      hovered.guid = None;
      hovered.distance = f32::MAX;
      // The sticky pick drops the moment the pointer is not ours.
 -    let yielded = rig.is_looking() || pointer_over_ui.0;
 +    let aim = look_point(&rig, look_aim.as_deref());
-+    let yielded = (rig.is_looking() && aim.is_none()) || pointer_over_ui.0;
++    let yielded = aim.is_none() && (rig.is_looking() || pointer_over_ui.0);
      if yielded {
          *last_pick = None;
      }
-@@ -604,7 +612,7 @@ pub(super) fn update_hovered_object(
+@@ -604,7 +613,7 @@ pub(super) fn update_hovered_object(
      if yielded {
          return;
      }

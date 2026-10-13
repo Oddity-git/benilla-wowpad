@@ -61,7 +61,6 @@ From your benilla folder:
 git clone https://github.com/Oddity-git/benilla-wowpad crates/benilla-wowpad
 git apply -3 crates/benilla-wowpad/patches/01-client-action-slots.patch
 git apply -3 crates/benilla-wowpad/patches/02-look-hover.patch
-git apply -3 crates/benilla-wowpad/patches/03-look-hover-plates.patch
 cargo build --release -p benilla-wowpad
 ```
 
@@ -115,9 +114,8 @@ What it does differently from the manual steps:
   of its own that never touch your normal action bars.
 - `02-look-hover`: while the camera turns, benilla's mouseover (the unit or object, its tooltip and
   highlight) follows the crosshair instead of switching off, so tooltips show live without the
-  camera pausing. Without WowPad driving it, nothing changes.
-- `03-look-hover-plates`: the same, when a nameplate or other UI sits under the hidden pointer
-  (as in a fight).
+  camera pausing, also with a nameplate under the hidden pointer (as in a fight). Without WowPad
+  driving it, nothing changes.
 
 A daily check (`.github/workflows/upstream.yml`) installs WowPad onto the newest benilla `main`
 on Linux and Windows and builds it, so a patch that stops fitting gets refreshed here.
