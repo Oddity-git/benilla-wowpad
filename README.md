@@ -71,7 +71,8 @@ not apply patches by hand. It does exactly the steps above. It is a plain text s
 before running, it downloads nothing, needs no admin rights, and only changes the benilla folder
 you pick.
 
-1. Get WowPad: the green **Code** button > **Download ZIP** (unzip it), or
+1. Get WowPad: `benilla-wowpad-<version>.zip` from the
+   [Releases page](https://github.com/Oddity-git/benilla-wowpad/releases) (unzip it), or
    `git clone https://github.com/Oddity-git/benilla-wowpad`.
 2. Double-click the installer in that folder:
    - **Windows:** `Install WowPad (Windows).bat`

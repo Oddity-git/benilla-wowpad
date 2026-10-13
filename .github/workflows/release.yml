@@ -1,0 +1,30 @@
+# Pushing a version tag (v0.1.0) publishes a GitHub release: the CHANGELOG section for that
+# version as its notes, and benilla-wowpad-<version>.zip (this repository, ready to unzip and
+# double-click the installer) as its download.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Notes and zip
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" '$0 == "## " v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "CHANGELOG.md has no '## $v' section"; exit 1; }
+          git archive --format=zip --prefix=benilla-wowpad/ -o "benilla-wowpad-$v.zip" HEAD
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" "benilla-wowpad-$v.zip" \
+            --title "WowPad for benilla $v" --notes-file notes.md
