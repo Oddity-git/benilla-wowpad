@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # install.sh - put WowPad on top of a benilla checkout, whatever state that checkout is in.
 #
-#   bash install.sh [path/to/benilla]      install or update, then build (default: the current folder)
+#   double-click install.sh (choose Run / Execute), or:
+#   bash install.sh [path/to/benilla]      install or update, then build (asks for the folder if not given)
 #   bash install.sh --no-build [path]      install or update, skip the build
 #   bash install.sh --patches-only [path]  only bring the engine patches in (for update scripts)
 #   bash install.sh --remove [path]        take WowPad's engine patches back out and delete the crate
@@ -20,12 +21,50 @@ for a in "$@"; do
         --no-build) BUILD=0 ;;
         --patches-only) PATCHES_ONLY=1; BUILD=0 ;;
         --remove) REMOVE=1; BUILD=0 ;;
-        -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
         -*) echo "unknown option $a (try --help)"; exit 2 ;;
         *) ROOT="$a" ;;
     esac
 done
-ROOT="$(cd "${ROOT:-.}" 2>/dev/null && pwd)" || { echo "STOPPED: no such folder"; exit 1; }
+
+# Double-clicked from a file manager: there is no terminal to show the output in, so open one
+# running this script, which stays open at the end.
+if [ ! -t 1 ] && [ -z "${WOWPAD_IN_TERMINAL:-}" ] && [ -z "${CI:-}" ] &&
+    { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; }; then
+    export WOWPAD_IN_TERMINAL=1
+    run="bash \"$0\" $*; echo; read -r -p 'Press Enter to close.' _"
+    for t in konsole gnome-terminal kgx xfce4-terminal kitty alacritty wezterm foot xterm x-terminal-emulator; do
+        command -v "$t" >/dev/null || continue
+        case "$t" in
+            gnome-terminal|kgx) exec "$t" -- bash -c "$run" ;;
+            wezterm) exec "$t" start -- bash -c "$run" ;;
+            *) exec "$t" -e bash -c "$run" ;;
+        esac
+    done
+fi
+
+is_benilla() { [ -n "$1" ] && [ -f "$1/Cargo.toml" ] && [ -d "$1/crates/benilla-app" ]; }
+
+# No folder given (a double-click): the benilla folder this one sits in (crates/benilla-wowpad),
+# the current folder, a single benilla folder next to this one, else ask with a folder picker.
+if [ -z "$ROOT" ]; then
+    up2="$(dirname "$(dirname "$SRC")")"
+    siblings=()
+    for d in "$(dirname "$SRC")"/*/; do is_benilla "${d%/}" && siblings+=("${d%/}"); done
+    if is_benilla "$up2"; then ROOT="$up2"
+    elif is_benilla "$PWD" && [ "$PWD" != "$SRC" ]; then ROOT="$PWD"
+    elif [ "${#siblings[@]}" = 1 ]; then ROOT="${siblings[0]}"
+    else
+        msg="Pick your benilla folder (the one with Cargo.toml and crates in it)"
+        if command -v kdialog >/dev/null; then ROOT="$(kdialog --title "$msg" --getexistingdirectory "$HOME" 2>/dev/null)"
+        elif command -v zenity >/dev/null; then ROOT="$(zenity --file-selection --directory --title="$msg" 2>/dev/null)"
+        else read -r -p "$msg: " ROOT
+        fi
+        [ -n "$ROOT" ] || { echo "STOPPED: no benilla folder picked. Run again and pick it, or pass its path."; exit 1; }
+    fi
+    echo "benilla folder: $ROOT"
+fi
+ROOT="$(cd "$ROOT" 2>/dev/null && pwd)" || { echo "STOPPED: no such folder"; exit 1; }
 
 stop() {
     printf '\nSTOPPED: %s\n' "$1"
@@ -34,8 +73,8 @@ stop() {
 }
 say() { printf '==> %s\n' "$1"; }
 
-[ -f "$ROOT/Cargo.toml" ] && [ -d "$ROOT/crates/benilla-app" ] ||
-    stop "$ROOT is not a benilla checkout (no crates/benilla-app). Run this from the benilla folder, or pass its path."
+is_benilla "$ROOT" ||
+    stop "$ROOT is not a benilla checkout (no crates/benilla-app). Pick the benilla folder itself."
 command -v git >/dev/null || stop "git is not installed"
 DEST="$ROOT/crates/benilla-wowpad"
 IS_REPO=0

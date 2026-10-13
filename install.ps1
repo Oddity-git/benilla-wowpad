@@ -1,6 +1,7 @@
 # install.ps1 - put WowPad on top of a benilla checkout on Windows; the same steps as install.sh.
 #
-#   powershell -ExecutionPolicy Bypass -File install.ps1 C:\path\to\benilla
+#   Double-click "Install WowPad (Windows).bat", or:
+#   powershell -ExecutionPolicy Bypass -File install.ps1 [C:\path\to\benilla]
 #   ... -NoBuild       install or update, skip the build
 #   ... -PatchesOnly   only bring the engine patches in (for update scripts)
 #   ... -Remove        take WowPad's engine patches back out and delete the crate
@@ -12,7 +13,7 @@
 # after it is touched. Extra cargo features: $env:WOWPAD_FEATURES="feat1,feat2" first.
 
 param(
-    [string]$Path = ".",
+    [string]$Path = "",
     [switch]$NoBuild,
     [switch]$PatchesOnly,
     [switch]$Remove
@@ -29,10 +30,36 @@ function Stop-Install($msg) {
 }
 function Say($msg) { Write-Host "==> $msg" }
 
+function Is-Benilla($dir) {
+    return $dir -and (Test-Path (Join-Path $dir "Cargo.toml")) -and
+        (Test-Path (Join-Path (Join-Path $dir "crates") "benilla-app"))
+}
+
+# No folder given (a double-click): the benilla folder this one sits in (crates\benilla-wowpad),
+# the current folder, a single benilla folder next to this one, else ask with a folder picker.
+if (-not $Path) {
+    $up2 = Split-Path (Split-Path $Src)
+    $here = (Get-Location).Path
+    $siblings = @(Get-ChildItem -Directory (Split-Path $Src) -ErrorAction SilentlyContinue |
+        Where-Object { Is-Benilla $_.FullName })
+    if (Is-Benilla $up2) { $Path = $up2 }
+    elseif ((Is-Benilla $here) -and ($here -ne $Src)) { $Path = $here }
+    elseif ($siblings.Count -eq 1) { $Path = $siblings[0].FullName }
+    else {
+        try {
+            Add-Type -AssemblyName System.Windows.Forms
+            $pick = New-Object System.Windows.Forms.FolderBrowserDialog
+            $pick.Description = "Pick your benilla folder (the one with Cargo.toml and crates in it)"
+            if ($pick.ShowDialog() -eq "OK") { $Path = $pick.SelectedPath }
+        } catch { }
+        if (-not $Path) { Stop-Install "no benilla folder picked. Run again and pick it, or pass its path." }
+    }
+    Write-Host "benilla folder: $Path"
+}
 if (-not (Test-Path $Path)) { Stop-Install "no such folder: $Path" }
 $Root = (Resolve-Path $Path).Path
-if (-not ((Test-Path (Join-Path $Root "Cargo.toml")) -and (Test-Path (Join-Path (Join-Path $Root "crates") "benilla-app")))) {
-    Stop-Install "$Root is not a benilla checkout (no crates\benilla-app). Pass the benilla folder's path."
+if (-not (Is-Benilla $Root)) {
+    Stop-Install "$Root is not a benilla checkout (no crates\benilla-app). Pick the benilla folder itself."
 }
 $git = Get-Command git -ErrorAction SilentlyContinue
 if (-not $git) { Stop-Install "Git is not installed (https://git-scm.com)" }
