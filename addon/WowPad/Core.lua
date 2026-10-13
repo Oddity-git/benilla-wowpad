@@ -730,10 +730,13 @@ local function BagStart(nodes)
     local n = nodes[i]
     local name = n:GetName() or ""
     local w, h = n:GetWidth(), n:GetHeight()
-    if string.find(name, "Item%d+$") or (w >= 30 and w <= 48 and math.abs(w - h) < 2) then
+    -- An item slot by name (ContainerFrame1Item3), else by shape: square, item-button sized.
+    -- Not the close button, which is square too (32) and sits above the slots.
+    local named = string.find(name, "Item%d+$") ~= nil
+    if not string.find(name, "Close") and (named or (w >= 34 and w <= 46 and math.abs(w - h) < 2)) then
       table.insert(slots, n)
       local bag = n:GetParent()
-      if bag and IsBags(bag) and bag:GetID() == 0 then table.insert(pack, n) end
+      if named and bag and IsBags(bag) and bag:GetID() == 0 then table.insert(pack, n) end
     end
   end
   return { DefaultNode(table.getn(pack) > 0 and pack or slots) }
@@ -804,7 +807,14 @@ function Nav.Refresh()
     elseif rn == "WorldMapFrame" then pref = { WorldMapButton }   -- the middle of the map
     elseif rn == "QuestFrame" then pref = QuestStart()
     elseif rn == "GossipFrame" then pref = GossipStart()
-    elseif IsBags(Nav.root) or BagLike(Nav.root) then pref = BagStart(nodes)
+    elseif IsBags(Nav.root) or BagLike(Nav.root) then
+      pref = BagStart(nodes)
+      -- The slots are laid out a moment after the bag shows: wait for them, not the close button.
+      -- (at most a second: a bag addon whose slots we can't tell apart gets the usual start).
+      if not pref[1] then
+        if Nav.bagWait ~= Nav.root then Nav.bagWait, Nav.bagWaitAt = Nav.root, GetTime() end
+        if GetTime() - Nav.bagWaitAt < 1 then Nav.UpdateHints(); return end
+      end
     elseif rn and string.find(rn, "^GroupLootFrame%d") then
       -- Need if allowed, else Greed (disabled buttons aren't nodes).
       pref = { getglobal(rn .. "RollButton"), getglobal(rn .. "GreedButton") }
