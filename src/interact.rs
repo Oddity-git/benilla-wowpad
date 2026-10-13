@@ -172,11 +172,11 @@ impl World<'_, '_> {
         // and the object's own `Transform`.
         let (camera, cam) = self.view()?;
         let tf = self.transforms.get(entity).ok()?;
-        // Where the icon's middle goes: about head height on a standing NPC (just under its quest
-        // mark), low over a corpse, over the middle of an object; scaled with the model.
+        // Where the icon's middle goes: just over a standing NPC's head (where its quest mark
+        // sits), a little over a corpse, over the middle of an object; scaled with the model.
         let up = match verb {
-            Verb::Talk => 1.9,
-            Verb::Loot | Verb::Skin => 0.5,
+            Verb::Talk => 2.6,
+            Verb::Loot | Verb::Skin => 0.9,
             _ => 0.8,
         } * tf.scale.y.max(0.1);
         let size = camera.logical_viewport_size()?;
