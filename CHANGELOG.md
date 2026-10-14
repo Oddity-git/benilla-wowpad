@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- L3 in the bags offers Disenchant on green or better gear when you know Enchanting.
 - Compare and preview (Y) work on loot rolls, loot window slots, vendor items and quest rewards,
   with a Y hint on loot rolls and the loot window.
 - The loot window's slots can be selected and looted with the pad (it starts on the first one).

@@ -1,9 +1,9 @@
 -- ItemActions.lua - L3 on a bag item: a small menu with what you can do to it, and Y previews
 -- the selected item in the dressing room. Out of combat only, like the rest of menu navigation.
 --
--- 1.12 has no secure code, so the 3.3.5 secure "Disenchant" button is left out: disenchanting
--- needs a secure macro to cast the spell and then take the item, which this client cannot do.
--- Destroy asks for a confirmation (Cancel is preselected).
+-- Disenchant (when you know it, on a green or better weapon or armour piece) casts the spell and
+-- hands it the item, as clicking the item with the spell's cursor does; 1.12 has no secure code
+-- in the way. Destroy asks for a confirmation (Cancel is preselected).
 --
 -- Returns link, bag, slot from the selected bag button; the tooltip its OnEnter showed, the bag
 -- and slot IDs when it is a real bag slot, else a search of the bags for that link.
@@ -374,6 +374,60 @@ destroy:SetScript("OnClick", function()
   Nav.Destroy(item.link, item.bag, item.slot)
 end)
 
+-- Disenchant: known (a spellbook scan), and the item can be disenchanted (green or better armour
+-- or weapon).
+local DE = "Disenchant"
+local function KnowsDisenchant()
+  local i = 1
+  while true do
+    local name = GetSpellName(i, BOOKTYPE_SPELL or "spell")
+    if not name then return false end
+    if name == DE then return true end
+    i = i + 1
+  end
+end
+
+local function Disenchantable(link)
+  local _, _, id = string.find(link or "", "item:(%d+)")
+  if not id then return false end
+  local _, _, quality, _, kind = GetItemInfo(tonumber(id))
+  return (quality or 0) >= 2 and (kind == "Armor" or kind == "Weapon")
+end
+
+-- Cast, then give the spell the item once its cursor is up (it may take a frame).
+local dePending
+local deDriver = CreateFrame("Frame")
+deDriver:Hide()
+deDriver:SetScript("OnUpdate", function()
+  local d = dePending
+  if not d or GetTime() > d.untl then dePending = nil; this:Hide(); return end
+  if SpellIsTargeting() then
+    dePending = nil
+    this:Hide()
+    if GetContainerItemLink(d.bag, d.slot) == d.link then
+      PickupContainerItem(d.bag, d.slot)
+    else
+      SpellStopTargeting()
+      WP.Print("That item moved; nothing was disenchanted.")
+    end
+  end
+end)
+
+function Nav.Disenchant(link, bag, slot)
+  if not (link and bag) then return end
+  ClearCursor()
+  CastSpellByName(DE)
+  dePending = { link = link, bag = bag, slot = slot, untl = GetTime() + 1 }
+  deDriver:Show()
+end
+
+local disenchant = Row("WowPadItemActionsDisenchant", DE)
+disenchant.tooltipText = "Disenchant the item into enchanting materials."
+disenchant:SetScript("OnClick", function()
+  F:Hide()
+  Nav.Disenchant(item.link, item.bag, item.slot)
+end)
+
 local cancel = Row("WowPadItemActionsCancel", CANCEL or "Cancel")
 cancel.tooltipText = "Keep the item."
 cancel:SetScript("OnClick", function() F:Hide() end)
@@ -388,13 +442,16 @@ function WP.OpenItemActions()
   item.link, item.bag, item.slot = link, bag, slot
   local _, count = GetContainerItemInfo(bag, slot)
   title:SetText(link .. ((count and count > 1) and (" x" .. count) or ""))
-  destroy:ClearAllPoints()
-  destroy:SetPoint("TOP", F, "TOP", 0, -30)
-  destroy:Show()
-  cancel:ClearAllPoints()
-  cancel:SetPoint("TOP", F, "TOP", 0, -52)
-  cancel:Show()
-  F:SetHeight(40 + 2 * 22)
+  local rows = {}
+  if Disenchantable(link) and KnowsDisenchant() then table.insert(rows, disenchant) else disenchant:Hide() end
+  table.insert(rows, destroy)
+  table.insert(rows, cancel)
+  for i = 1, table.getn(rows) do
+    rows[i]:ClearAllPoints()
+    rows[i]:SetPoint("TOP", F, "TOP", 0, -30 - (i - 1) * 22)
+    rows[i]:Show()
+  end
+  F:SetHeight(40 + table.getn(rows) * 22)
   F:Show()
   if WP.Nav then WP.Nav.SelectSoon(cancel) end
 end
