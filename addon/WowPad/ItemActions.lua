@@ -27,9 +27,38 @@ local function InBags(n)
   return false
 end
 
+-- The group loot roll frame n sits in (any of its buttons), else nil.
+function Nav.RollFrameOf(n)
+  local f, depth = n, 0
+  while f and depth < 4 do
+    local name = f.GetName and f:GetName()
+    if name and string.find(name, "^GroupLootFrame%d$") then return f end
+    f = f.GetParent and f:GetParent()
+    depth = depth + 1
+  end
+end
+
+-- The item behind a button the game knows how to name: a loot roll, a loot slot, a vendor item,
+-- a quest reward. benilla's GameTooltip has no GetItem, so these ask the game directly.
+local function KnownItem(n)
+  local roll = Nav.RollFrameOf(n)
+  if roll and roll.rollID then return GetLootRollItemLink(roll.rollID) end
+  local name = n:GetName() or ""
+  if string.find(name, "^LootButton%d$") and n.slot then return GetLootSlotLink(n.slot) end
+  if string.find(name, "^MerchantItem%d+ItemButton$") and n.GetID then
+    return GetMerchantItemLink(n:GetID())
+  end
+  if string.find(name, "^Quest%a*Item%d+$") and n.type and n.GetID then
+    if string.find(name, "^QuestLog") then return GetQuestLogItemLink(n.type, n:GetID()) end
+    return GetQuestItemLink(n.type, n:GetID())
+  end
+end
+
 function Nav.FocusedItem()
   local n = Nav.cur
   if not n then return end
+  local known = KnownItem(n)
+  if known then return known end
   local p = n.GetParent and n:GetParent()
   local bag = (type(n.GetBag) == "function") and n:GetBag() or (p and p.GetID and p:GetID())
   local slot = n.GetID and n:GetID()
@@ -135,6 +164,13 @@ function Nav.StartCompare()
     if WowPadDB and WowPadDB.debug then WP.Print("compare: " .. equipLoc .. " is not equippable") end
     return false
   end
+  -- A loot roll's buttons (Need / Greed / Pass) show their own tooltip: put the item in it, so the
+  -- plates sit beside the item they compare against.
+  local roll = Nav.RollFrameOf(Nav.cur)
+  if roll and roll.rollID and not GameTooltip:IsOwned(roll) then
+    GameTooltip:SetOwner(roll, "ANCHOR_RIGHT")
+    GameTooltip:SetLootRollItem(roll.rollID)
+  end
   -- One plate per worn candidate (rings, trinkets and dual-wield show two), to the left of the
   -- item tooltip, top-aligned with it. Anchor before content so the layout includes the final
   -- points; a plate with no lines stays hidden, never blank.
@@ -185,6 +221,9 @@ end
 
 function Nav.StopCompare()
   Nav.HideCompare()
+  -- The roll item tooltip StartCompare put up goes with it.
+  local roll = Nav.cur and Nav.RollFrameOf(Nav.cur)
+  if roll and GameTooltip:IsOwned(roll) then GameTooltip:Hide() end
 end
 
 -- Y: tap previews; hold the same button past `hold` compares.

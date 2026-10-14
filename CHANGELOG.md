@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Compare and preview (Y) work on loot rolls, loot window slots, vendor items and quest rewards,
+  with a Y hint on loot rolls and the loot window.
 - The loot window's slots can be selected and looted with the pad (it starts on the first one).
 - Windows open on a sensible spot: the map in its middle, quest windows on Accept / Complete or
   the first quest, bags on the first slot.

@@ -319,7 +319,11 @@ function Nav.UpdateHints()
   elseif root == QuestLogFrame then
     parts = { H("A", "Select"), H("X", "Track"), H("B", "Close") }
   elseif string.find(root:GetName() or "", "^GroupLootFrame") then
-    parts = { H("A", "Roll"), H("B", "Pass") }
+    parts = { H("A", "Roll"), H("Y", (WP.CompareOn and WP.CompareOn()) and "Preview / hold: Compare" or "Preview"),
+              H("B", "Pass") }
+  elseif root == LootFrame then
+    parts = { H("A", "Loot"), H("Y", (WP.CompareOn and WP.CompareOn()) and "Preview / hold: Compare" or "Preview"),
+              H("B", "Close") }
   else
     parts = { H("A", "Select"), H("B", "Close") }
   end
