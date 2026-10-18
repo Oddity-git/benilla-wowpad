@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Put spells and items on the bar with the pad: Y on a spell in the spellbook (or Put on bar in
+  a bag item's L3 menu), then press the bar button it should go on. B cancels.
 - L3 in the bags offers Disenchant on green or better gear when you know Enchanting.
 - Compare and preview (Y) work on loot rolls, loot window slots, vendor items and quest rewards,
   with a Y hint on loot rolls and the loot window.

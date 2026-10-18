@@ -194,7 +194,8 @@ off.
 | A | Click |
 | X | Right-click (use, equip, sell). Quest log: track / untrack the quest |
 | Y tap / hold | Preview bag gear in the dressing room / compare it with what you wear |
-| L3 (in bags) | Item actions: Disenchant (when you know it), Destroy (asks first), Cancel (preselected) |
+| L3 (in bags) | Item actions: Put on bar, Disenchant (when you know it), Destroy (asks first), Cancel (preselected) |
+| Y (in the spellbook) | Put the selected spell on the bar: then press a D-pad direction, or hold LT / RT / both and press a button. B cancels |
 | LB / RB | Switch tabs (Character, Social, Talents, Auction House, Merchant; spellbook: the school tabs). No tabs: switch window |
 | LT / RT | In a window with tabs: switch between open windows |
 | B | Close the window you're on (Esc menu: Return to Game; loot roll: Pass) |

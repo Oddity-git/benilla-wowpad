@@ -305,7 +305,9 @@ function Nav.UpdateHints()
   if not root then navFocus:Hide(); hints:Hide(); return end
   if root == WP.Radial then navFocus:Hide(); hints:Hide(); return end
   local parts
-  if root == MerchantFrame then
+  if WP.placing then
+    parts = { H("D-pad", "Place"), H("LT/RT", "+ button: Place"), H("B", "Cancel") }
+  elseif root == MerchantFrame then
     parts = { H("A", "Select"), H("X", "Buy"), H("B", "Close") }
   elseif IsBags(root) or BagLike(root) then
     local vendorOpen = MerchantFrame and MerchantFrame:IsShown()
@@ -318,6 +320,8 @@ function Nav.UpdateHints()
               H("D-pad", "Pins"), H("B", (GetCurrentMapContinent() or 0) > 0 and "Back" or "Close") }
   elseif root == QuestLogFrame then
     parts = { H("A", "Select"), H("X", "Track"), H("B", "Close") }
+  elseif root == SpellBookFrame then
+    parts = { H("A", "Cast"), H("Y", "Put on bar"), H("B", "Close") }
   elseif string.find(root:GetName() or "", "^GroupLootFrame") then
     parts = { H("A", "Roll"), H("Y", (WP.CompareOn and WP.CompareOn()) and "Preview / hold: Compare" or "Preview"),
               H("B", "Pass") }
@@ -919,8 +923,78 @@ local function FixedSlot(i, down)
   if down and WP.Bar then WP.Bar.PressFixed(i) end
 end
 
+---------------------------------------------------------------------------
+-- Putting a spell or item on the bar with the pad: Y on a spell in the spellbook (or Put on bar
+-- in a bag item's L3 menu) picks it up, then the next bar button pressed places it (the D-pad
+-- alone, or any button with LT / RT / both held). B cancels.
+---------------------------------------------------------------------------
+WP.placing = false
+
+local function OnCursor() return CursorHasSpell() or CursorHasItem() end
+
+function WP.StartPlacing(what)
+  if not OnCursor() then return false end
+  WP.placing = what or true
+  Print("Place " .. tostring(what or "it") .. ": press a D-pad direction, or hold LT / RT / both and"
+    .. " press a button. B cancels.")
+  if WP.Bar and WP.Bar.UpdateVisibility then WP.Bar.UpdateVisibility() end
+  if Nav.UpdateHints then Nav.UpdateHints() end
+  return true
+end
+
+function WP.StopPlacing(say)
+  if not WP.placing then return end
+  WP.placing = false
+  ClearCursor()
+  if say then Print(say) end
+  if WP.Bar and WP.Bar.UpdateVisibility then WP.Bar.UpdateVisibility() end
+  if Nav.UpdateHints then Nav.UpdateHints() end
+end
+
+-- The spell under the spellbook selection, picked up for placing.
+function Nav.PickSpell()
+  local b = Nav.cur
+  local name = b and b:GetName()
+  if not (name and string.find(name, "^SpellButton%d+$")) then return false end
+  local book = SpellBookFrame and SpellBookFrame.bookType or BOOKTYPE_SPELL or "spell"
+  if book ~= (BOOKTYPE_SPELL or "spell") then
+    Print("Pet spells go on the pet bar.")
+    return true
+  end
+  local id = SpellBook_GetSpellID and SpellBook_GetSpellID(b:GetID())
+  if not id or id < 1 then return true end
+  local spell, rank = GetSpellName(id, book)
+  if IsSpellPassive and IsSpellPassive(id, book) then
+    Print((spell or "That spell") .. " is passive; it can't go on a bar.")
+    return true
+  end
+  ClearCursor()
+  PickupSpell(id, book)
+  WP.StartPlacing(spell and (rank and rank ~= "" and (spell .. " (" .. rank .. ")") or spell))
+  return true
+end
+
+-- A press while placing: true when it was taken.
+local function PlaceSignal(set, i, down)
+  if not WP.placing then return false end
+  if not OnCursor() then WP.placing = false; Nav.UpdateHints(); return false end
+  if not down then return true end
+  if set == 0 and i == 6 then WP.StopPlacing("Placing cancelled."); return true end
+  if set == 0 and i >= 5 then
+    Print("A, B, X and Y without a trigger are fixed; use the D-pad or hold LT / RT.")
+    return true
+  end
+  local slot = WP.Bar and WP.Bar.ActionSlot(set, i)
+  if not slot then return true end
+  PlaceAction(slot)
+  local where = (set > 0 and (WP.SET_NAMES[set] .. " + ") or "") .. WP.SLOT_LABELS[i]
+  WP.StopPlacing("Placed on " .. where .. ".")
+  return true
+end
+
 local function SlotSignal(i, down)
   local set = WP.set < 0 and 0 or WP.set
+  if PlaceSignal(set, i, down) then return end
   -- The utility ring's button: down shows the ring, up fires the wedge picked.
   if WowPadDB and tonumber(WowPadDB.wpRingSlot) == set * 10 + i then
     if WP.Ring then WP.Ring.Key(down) end
@@ -931,6 +1005,11 @@ local function SlotSignal(i, down)
       -- The keyboard: Y types a space.
       if WP.Keyboard and WP.Keyboard:IsShown() then
         if down then WP.Keyboard.Space() end
+        return
+      end
+      -- Y on a spell in the spellbook: pick it up to put on the bar.
+      if Nav.Active() and Nav.root == SpellBookFrame then
+        if down then Nav.PickSpell() end
         return
       end
       -- Y: tap previews, hold compares (ItemActions.lua).
@@ -1155,6 +1234,7 @@ end
 -- LT / RT with a window that has tabs (so the bumpers page them): the press swaps window, as on
 -- 3.3.5. The set still shows while the trigger is held.
 local function TriggerSwap(step)
+  if WP.placing then return end   -- the triggers pick the set to place on
   if WP.set ~= 0 or not Nav.Active() or not Nav.root or not Nav.HasTabs(Nav.root) then return end
   if table.getn(Nav.roots) > 1 then Nav.CycleRoot(step) end
 end
@@ -1227,7 +1307,7 @@ function WowPad_Frame()
     inv, tonumber(db.wpPeekDelay) or 0,
     db.wpWalkRun == true, db.wpCamSmooth == true, db.wpBumperFlick == true,
     tonumber(db.wpRingSlot) or 0,
-    MenuContext() and WP.set <= 0 and not WP.OwnMenu() and true or false,
+    MenuContext() and WP.set <= 0 and not WP.OwnMenu() and not WP.placing and true or false,
     wx, wy,
     db.wpSwapXY == true
 end

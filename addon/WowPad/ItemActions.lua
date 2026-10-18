@@ -428,6 +428,17 @@ disenchant:SetScript("OnClick", function()
   Nav.Disenchant(item.link, item.bag, item.slot)
 end)
 
+-- Put on bar: pick the item up and place it with the next bar button (Core.lua).
+local onbar = Row("WowPadItemActionsOnBar", "Put on bar")
+onbar.tooltipText = "Then press the bar button to put it on (hold LT / RT for the other sets)."
+onbar:SetScript("OnClick", function()
+  F:Hide()
+  if GetContainerItemLink(item.bag, item.slot) ~= item.link then return end
+  ClearCursor()
+  PickupContainerItem(item.bag, item.slot)
+  WP.StartPlacing(item.link)
+end)
+
 local cancel = Row("WowPadItemActionsCancel", CANCEL or "Cancel")
 cancel.tooltipText = "Keep the item."
 cancel:SetScript("OnClick", function() F:Hide() end)
@@ -442,7 +453,7 @@ function WP.OpenItemActions()
   item.link, item.bag, item.slot = link, bag, slot
   local _, count = GetContainerItemInfo(bag, slot)
   title:SetText(link .. ((count and count > 1) and (" x" .. count) or ""))
-  local rows = {}
+  local rows = { onbar }
   if Disenchantable(link) and KnowsDisenchant() then table.insert(rows, disenchant) else disenchant:Hide() end
   table.insert(rows, destroy)
   table.insert(rows, cancel)
