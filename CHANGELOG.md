@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The target menu (Y) works again, in a fight too: the camera and sticks keep working while it
+  is open, D-pad up / down picks a row, A uses it, B or Y closes it.
 - Put spells and items on the bar with the pad: Y on a spell in the spellbook (or Put on bar in
   a bag item's L3 menu), then press the bar button it should go on. B cancels.
 - L3 in the bags offers Disenchant on green or better gear when you know Enchanting.

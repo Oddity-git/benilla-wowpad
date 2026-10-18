@@ -426,7 +426,6 @@ end
 -- mouse click, so it works wherever the pointer is.
 function WP.OwnMenu()
   if WP.Radial and WP.Radial:IsVisible() then return WP.Radial end
-  if WP.UnitMenu and WP.UnitMenu:IsVisible() then return WP.UnitMenu end
   return nil
 end
 
@@ -995,6 +994,11 @@ end
 local function SlotSignal(i, down)
   local set = WP.set < 0 and 0 or WP.set
   if PlaceSignal(set, i, down) then return end
+  -- The target menu (Y) takes the D-pad, A, B and Y while it is open, in a fight too.
+  if set == 0 and WP.UnitMenu and WP.UnitMenu:IsShown() then
+    if not down then return end
+    if WP.UnitMenu.Key(i) then return end
+  end
   -- The utility ring's button: down shows the ring, up fires the wedge picked.
   if WowPadDB and tonumber(WowPadDB.wpRingSlot) == set * 10 + i then
     if WP.Ring then WP.Ring.Key(down) end

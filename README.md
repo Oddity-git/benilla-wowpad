@@ -161,7 +161,7 @@ On Wayland, launch it as an X11 window so Steam can see it:
 | A | Jump |
 | B | Clear target / back out of menus |
 | X | Interact with what the prompt shows (talk, loot everything, gather, open) without targeting it; with no prompt, your target + start attacking a hostile one |
-| Y | Target menu |
+| Y | Target menu (works in a fight; D-pad up / down picks, A uses, B or Y closes) |
 | LB / RB | Target nearest friendly / enemy (can be swapped in Options; see Healer mode) |
 | LB + RB held | Right stick zooms the camera |
 | D-pad | 4 action slots |

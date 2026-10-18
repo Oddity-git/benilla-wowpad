@@ -1,5 +1,7 @@
 -- UnitMenu.lua - Y: a target menu like right-clicking a unit frame. A list of plain buttons
--- (1.12 has no secure code to work around), reached with the D-pad and clicked with A.
+-- (1.12 has no secure code to work around). It is not a window: the sticks, camera and triggers
+-- keep working, so it works in a fight. While it is open the D-pad up / down picks a row, A uses
+-- it, B or Y closes it (Core.lua hands those presses to M.Key).
 
 local WP = WowPad
 local MAX_ITEMS = 12
@@ -16,8 +18,8 @@ M:SetBackdrop({
   insets = { left = 4, right = 4, top = 4, bottom = 4 },
 })
 M:Hide()
-table.insert(WP.overlays, M)
 WP.UnitMenu = M
+M.sel = 1
 
 local title = M:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 title:SetPoint("TOP", M, "TOP", 0, -10)
@@ -55,6 +57,8 @@ for i = 1, MAX_ITEMS do
     M:Hide()
     if this.action then this.action() end
   end)
+  b:SetScript("OnEnter", function() M.sel = this.index end)
+  b.index = i
   b:Hide()
   buttons[i] = b
 end
@@ -81,22 +85,35 @@ function M.Open()
   else
     M:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
   end
+  M.count, M.sel = n, 1
   M:Show()
-  if WP.Nav then WP.Nav.SelectSoon(buttons[1]) end
+  M.Light()
 end
 
--- The selected item is lit; the pointer resting on an item selects it (A presses the selected
--- one, Core.lua's Nav.Press).
-M:SetScript("OnUpdate", function()
-  local Nav = WP.Nav
-  if not Nav then return end
-  local settled = GetTime() - (Nav.selectedAt or 0) > 0.15
+function M.Light()
   for i = 1, MAX_ITEMS do
-    local b = buttons[i]
-    if b:IsShown() and settled and MouseIsOver(b) then Nav.cur = b end
+    if i == M.sel then buttons[i]:LockHighlight() else buttons[i]:UnlockHighlight() end
   end
-  for i = 1, MAX_ITEMS do
-    local b = buttons[i]
-    if b == Nav.cur then b:LockHighlight() else b:UnlockHighlight() end
+end
+
+-- A pad press while the menu is open: true when it took it. Down presses only.
+function M.Key(i)
+  if not M:IsShown() then return false end
+  if i == 1 or i == 2 then                      -- D-pad up / down
+    local n = M.count or 0
+    if n > 0 then M.sel = math.mod((M.sel or 1) - 1 + (i == 1 and -1 or 1) + n, n) + 1 end
+    M.Light()
+  elseif i == 5 then                            -- A: use the row
+    local b = buttons[M.sel or 1]
+    M:Hide()
+    if b and b.action then b.action() end
+  elseif i == 6 or i == 8 then                  -- B / Y: close
+    M:Hide()
   end
-end)
+  return i ~= 3 and i ~= 4 and i ~= 7           -- left / right and X stay the bar's
+end
+
+-- A new target (or none) closes it: its rows were for the old one.
+M:RegisterEvent("PLAYER_TARGET_CHANGED")
+M:SetScript("OnEvent", function() M:Hide() end)
+M:SetScript("OnUpdate", function() M.Light() end)
