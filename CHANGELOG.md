@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The lite bar's trigger hint (LT, RT, LT+RT) shows its button names again on the newest Benilla.
 - A (jump) and L3 (auto-run) work on the newest Benilla, which blocks addons from calling
   movement directly and showed a "WowPad has been blocked" popup instead.
 - The target menu (Y) works again, in a fight too: the camera and sticks keep working while it

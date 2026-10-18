@@ -129,7 +129,7 @@ end
 
 function WP.Keys(s)
   if not s then return s end
-  return (string.gsub(s, "%a%w*", function(w) return Key(w) or Name(w) end))
+  return (string.gsub(s, "%a%w*", function(w) return Key(w) or Name(w) or w end))
 end
 
 function WP.Text(s)
