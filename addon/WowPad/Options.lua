@@ -269,11 +269,20 @@ function WP.OpenOptions()
 end
 
 ---------------------------------------------------------------------------
--- The WowPad button, under the game menu (Escape).
+-- The WowPad button, in the game menu (Escape) under Macros, as MCP adds its AddOns button:
+-- Logout's one TOP anchor moves under it and the menu grows by its height. Under the menu it sat
+-- behind the button hint.
 ---------------------------------------------------------------------------
 if GameMenuFrame then
   local g = CreateFrame("Button", "WowPadGameMenuButton", GameMenuFrame, "GameMenuButtonTemplate")
-  g:SetPoint("TOP", GameMenuFrame, "BOTTOM", 0, -4)
+  if GameMenuButtonMacros and GameMenuButtonLogout then
+    local _, _, _, _, gap = GameMenuButtonLogout:GetPoint(1)
+    g:SetPoint("TOP", GameMenuButtonMacros, "BOTTOM", 0, 0)
+    GameMenuButtonLogout:SetPoint("TOP", g, "BOTTOM", 0, gap or -1)
+    GameMenuFrame:SetHeight(GameMenuFrame:GetHeight() + g:GetHeight())
+  else
+    g:SetPoint("TOP", GameMenuFrame, "BOTTOM", 0, -4)
+  end
   g:SetText("WowPad")
   g:SetScript("OnClick", function()
     HideUIPanel(GameMenuFrame)
