@@ -250,6 +250,22 @@ impl Io<'_> {
             Ok(_) => {}
             Err(e) => warn!("wowpad: {command} failed: {e}"),
         }
+        self.asked_binding();
+    }
+
+    /// A movement binding the addon asked for during the signal (`WP.AskBinding`): the engine
+    /// refuses movement functions to an addon's code, but the game's own binding body runs as the
+    /// client's, so it is run here as the same press.
+    fn asked_binding(&self) {
+        let asked: Option<String> = self
+            .script
+            .eval("local c = WowPad_WantBinding; WowPad_WantBinding = nil; return c")
+            .unwrap_or(None);
+        match asked.as_deref() {
+            Some(command @ ("JUMP" | "TOGGLEAUTORUN")) => self.binding(command, true),
+            Some(other) => warn!("wowpad: binding {other} is not one WowPad may ask for"),
+            None => {}
+        }
     }
 
     fn tap(&self, name: &str) {

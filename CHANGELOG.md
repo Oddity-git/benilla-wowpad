@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A (jump) and L3 (auto-run) work on the newest Benilla, which blocks addons from calling
+  movement directly and showed a "WowPad has been blocked" popup instead.
 - The target menu (Y) works again, in a fight too: the camera and sticks keep working while it
   is open, D-pad up / down picks a row, A uses it, B or Y closes it.
 - Put spells and items on the bar with the pad: Y on a spell in the spellbook (or Put on bar in

@@ -4,7 +4,8 @@
 -- How it fits together on benilla:
 --  * benilla-wowpad (the Rust side, WowPad's DLL in-process) runs a WOWPAD_<SIGNAL> binding
 --    command for each signal (Bindings.xml), down and up, so WowPad_Signal sees `keystate` as a
---    key's binding would and a cast from it is a hardware event.
+--    key's binding would and a cast from it is a hardware event. Movement is the exception: an
+--    addon may not call it even then, so WP.AskBinding hands Jump and auto-run back to Rust.
 --  * 1.12 has no secure code and no combat lockdown, so what the 3.3.5 secure header did (point
 --    the 8 slot keys at the held set, or at menu navigation while a window is open) is a plain
 --    dispatch here: WowPad_Signal reads the mode, the triggers and the context and acts.
@@ -23,6 +24,12 @@ WP.Print = Print
 
 local function InCombat() return UnitAffectingCombat("player") end
 WP.InCombat = InCombat
+
+-- Movement functions refuse an addon's call (benilla follows 1.12's protected-action gate), so
+-- Jump and auto-run are asked of the Rust side, which runs the game's own binding for them in
+-- the same press. Only JUMP and TOGGLEAUTORUN are honoured there.
+local function AskBinding(command) WowPad_WantBinding = command end
+WP.AskBinding = AskBinding
 
 -- 1.12 has no InCombatLockdown; the 3.3.5 code's "not in combat" guards were for secure frames
 -- only, so the port keeps the ones that change what the player sees mid-fight.
@@ -911,7 +918,7 @@ end
 
 local function FixedSlot(i, down)
   if i == 5 then                                    -- A: jump
-    if down then Jump() end
+    if down then AskBinding("JUMP") end
   elseif i == 6 then                                -- B: clear target
     if down then ClearTarget() end
   elseif i == 7 then                                -- X: (interact +) attack
@@ -1261,7 +1268,7 @@ local ON_DOWN = {
     if MenuContext() then
       if WP.OpenItemActions then WP.OpenItemActions() end
     else
-      ToggleAutoRun()
+      AskBinding("TOGGLEAUTORUN")
     end
   end,
   LB              = function() Bumper("LB") end,
