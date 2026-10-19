@@ -5,9 +5,11 @@
 -- "here" (the item's zone, or the object its spell needs, is right here) or "target" (no place
 -- binding; text is its spell text, sure while it names the subzone or zone you are in, or your
 -- target: "filled with water from the Ruins of Stardust well"). A "no" row, text the reason, is
--- row is a quest item bound to somewhere else; /wp debug prints why. With none of them sure, the
--- hint still offers the first quest item, faded: LT + RT + L3 always uses a quest item, and the
--- game says so when the place is wrong. /wp questitem turns the hint off.
+-- a quest item bound to somewhere else; a "far" row is one whose spots the server's database
+-- lists (tools/export-quest-spots.sh), none of them here, so it never shows. /wp debug prints
+-- why. With none of them sure, the hint still offers the first "target" or "no" item, faded:
+-- LT + RT + L3 uses it, and the game says so when the place is wrong. /wp questitem turns the
+-- hint off.
 
 local WP = WowPad
 local M = {}
@@ -79,7 +81,7 @@ function M.Dump()
   if table.getn(items) == 0 then WP.Print("quest items: none with a use in your bags") end
   for i = 1, table.getn(items) do
     local row = items[i]
-    if row[3] == "no" then WP.Print("quest item not ready: " .. (row[4] or "?"))
+    if row[3] == "no" or row[3] == "far" then WP.Print("quest item not ready: " .. (row[4] or "?"))
     elseif row[3] == "skip" then WP.Print("item skipped: " .. (row[4] or "?"))
     else WP.Print("quest item " .. row[3] .. ": " .. (GetContainerItemLink(row[1], row[2]) or "?")) end
   end

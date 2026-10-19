@@ -9,12 +9,21 @@
 //! An unbound item whose text names a clickable object in reach (the well a waterskin is filled
 //! at) is *here* too. One that is place-bound but not ready is listed as *no* with the reason, and
 //! under `/wp debug` the other usable items as *skip* with their facts; `/wp debug` prints both.
+//!
+//! What the client cannot know, the server's database can: `tools/export-quest-spots.sh` writes
+//! `benilla-config/wowpad-quest-spots.tsv` from the cMaNGOS world database, every spawn of the
+//! creatures and objects each quest item's spell is meant for, and every spell focus object. An
+//! item with spots there is *here* within one of them and *far* (with the distance) elsewhere,
+//! whatever the client-side guesses say. The file is read again when it changes.
 
 use benilla_app::{HeldItemFacts, ObjectType, Objects};
 use benilla_ui::script::UiScript;
 use benilla_world::terrain_stream::CurrentArea;
 use benilla_world::world_map::CurrentMap;
 use bevy::prelude::*;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::SystemTime;
 
 /// How often the bags are looked through again, seconds.
 const SCAN_EVERY: f32 = 0.25;
@@ -31,11 +40,118 @@ const PACK_SLOTS: u8 = 16;
 const BAG_SLOT_FIRST: u8 = 19;
 const BAGS: u8 = 4;
 
-/// The last list the addon was told, and the time since the last scan.
+/// The spots file in `benilla-config/`, and how often it is checked for a new export, seconds.
+const SPOTS_FILE: &str = "wowpad-quest-spots.tsv";
+const SPOTS_CHECK_EVERY: f32 = 5.0;
+
+/// The last list the addon was told, the time since the last scan, and the server's spots.
 #[derive(Resource, Default)]
 pub struct QuestItems {
     since: f32,
     sent: Option<String>,
+    spots: Spots,
+    spots_checked: Option<f32>,
+    spots_stamp: Option<SystemTime>,
+}
+
+/// One place an item's use works: a map and a WoW position, with how near counts, yards.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Spot {
+    map: u32,
+    at: Vec3,
+    radius: f32,
+}
+
+/// The exported spots, by item entry and by spell focus id.
+#[derive(Default, Debug)]
+struct Spots {
+    items: HashMap<u32, Vec<Spot>>,
+    focus: HashMap<u32, Vec<Spot>>,
+}
+
+impl Spots {
+    /// The export's rows: `item|focus  id  map  x  y  z  radius`, tab separated; others skipped.
+    fn parse(text: &str) -> Self {
+        let mut spots = Self::default();
+        for line in text.lines() {
+            let f: Vec<&str> = line.split('\t').map(str::trim).collect();
+            let [kind, id, map, x, y, z, radius] = f[..] else {
+                continue;
+            };
+            let (Ok(id), Ok(map), Ok(x), Ok(y), Ok(z), Ok(radius)) = (
+                id.parse::<u32>(),
+                map.parse::<u32>(),
+                x.parse::<f32>(),
+                y.parse::<f32>(),
+                z.parse::<f32>(),
+                radius.parse::<f32>(),
+            ) else {
+                continue;
+            };
+            let spot = Spot {
+                map,
+                at: Vec3::new(x, y, z),
+                radius,
+            };
+            match kind {
+                "item" => spots.items.entry(id).or_default().push(spot),
+                "focus" => spots.focus.entry(id).or_default().push(spot),
+                _ => {}
+            }
+        }
+        spots
+    }
+
+    /// The nearest of `spots` on the player's map, and whether the player is within its radius.
+    fn nearest(spots: &[Spot], here: &Here) -> Option<(f32, bool)> {
+        let (map, at) = (here.map?, here.at?);
+        spots
+            .iter()
+            .filter(|s| s.map == map)
+            .map(|s| {
+                let d = s.at.distance(at);
+                (d, d <= s.radius)
+            })
+            .min_by(|a, b| {
+                (!a.1, a.0)
+                    .partial_cmp(&(!b.1, b.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    }
+}
+
+fn spots_path() -> Option<PathBuf> {
+    benilla_app::config_dir().map(|d| d.join(SPOTS_FILE))
+}
+
+/// Reads the spots file again when it is new or changed, a check every few seconds.
+fn refresh_spots(state: &mut QuestItems, now: f32) {
+    if state
+        .spots_checked
+        .is_some_and(|t| now - t < SPOTS_CHECK_EVERY)
+    {
+        return;
+    }
+    state.spots_checked = Some(now);
+    let Some(path) = spots_path() else { return };
+    let stamp = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+    if stamp == state.spots_stamp {
+        return;
+    }
+    state.spots_stamp = stamp;
+    state.spots = match std::fs::read_to_string(&path) {
+        Ok(text) => {
+            let spots = Spots::parse(&text);
+            info!(
+                "wowpad: quest item spots for {} items and {} spell focuses from {}",
+                spots.items.len(),
+                spots.focus.len(),
+                path.display()
+            );
+            spots
+        }
+        Err(_) => Spots::default(),
+    };
 }
 
 /// What a held item is to the hint.
@@ -46,6 +162,8 @@ enum Verdict {
     Target(String),
     /// Place-bound but not here, and why.
     No(String),
+    /// The server's spots for it are all elsewhere, and how far the nearest is.
+    Far(String),
     /// Not a quest item, with its facts for `/wp debug`.
     Skip(String),
     /// No template yet, or no use.
@@ -73,6 +191,7 @@ pub fn scan(
         return;
     }
     state.since = 0.0;
+    refresh_spots(&mut state, time.elapsed_secs());
     let debug = script
         .eval::<bool>("return WowPadDB and WowPadDB.debug and true or false")
         .unwrap_or(false);
@@ -87,8 +206,9 @@ pub fn scan(
     };
     let mut list = String::new();
     for (bag, slot, entry) in held(&objects) {
-        let row = match ready(&facts, &objects, &here, entry) {
+        let row = match ready(&facts, &objects, &state.spots, &here, entry) {
             Verdict::Here => ("here", String::new()),
+            Verdict::Far(why) => ("far", why),
             Verdict::Target(text) => ("target", text),
             Verdict::No(why) => ("no", why),
             Verdict::Skip(why) if debug => ("skip", why),
@@ -164,7 +284,13 @@ fn held(objects: &Objects) -> Vec<(u8, u8, u32)> {
 }
 
 /// Whether a held item's use works here, and how; the reasons are for `/wp debug`.
-fn ready(facts: &HeldItemFacts, objects: &Objects, here: &Here, entry: u32) -> Verdict {
+fn ready(
+    facts: &HeldItemFacts,
+    objects: &Objects,
+    spots: &Spots,
+    here: &Here,
+    entry: u32,
+) -> Verdict {
     let Some(item) = facts.template(entry) else {
         return Verdict::Silent;
     };
@@ -176,6 +302,15 @@ fn ready(facts: &HeldItemFacts, objects: &Objects, here: &Here, entry: u32) -> V
     else {
         return Verdict::Silent;
     };
+    let name = &item.name;
+    // The server's own word on where it works comes first.
+    if let Some(list) = spots.items.get(&entry) {
+        return match Spots::nearest(list, here) {
+            Some((_, true)) => Verdict::Here,
+            Some((d, false)) => Verdict::Far(format!("{name}: nearest spot {}", yards(d))),
+            None => Verdict::Far(format!("{name}: no spot on this map")),
+        };
+    }
     let focus = facts.spell_focus(spell);
     // A place-bound use is a quest item's whatever its class; an unbound one only for a quest item.
     let bound = item.area != 0 || item.map != 0 || focus != 0;
@@ -185,7 +320,6 @@ fn ready(facts: &HeldItemFacts, objects: &Objects, here: &Here, entry: u32) -> V
             item.name, item.class, item.bonding
         ));
     }
-    let name = &item.name;
     if item.map != 0 && here.map != Some(item.map) {
         return Verdict::No(format!("{name}: map {} (here {:?})", item.map, here.map));
     }
@@ -228,13 +362,17 @@ fn ready(facts: &HeldItemFacts, objects: &Objects, here: &Here, entry: u32) -> V
             }
             nearest = Some(nearest.map_or(d, |n| n.min(d)));
         }
+        // Out of streaming range the server's list of focus objects still knows.
+        if let Some(list) = spots.focus.get(&focus) {
+            return match Spots::nearest(list, here) {
+                Some((_, true)) => Verdict::Here,
+                Some((d, false)) => Verdict::Far(format!("{name}: nearest focus {}", yards(d))),
+                None => Verdict::Far(format!("{name}: no focus {focus} on this map")),
+            };
+        }
         return Verdict::No(format!(
             "{name}: needs focus {focus}; {focus_objects} focus objects streamed, nearest match {}",
-            // In 10 yd steps, so walking about does not rewrite the list each scan.
-            nearest.map_or("none".to_string(), |d| format!(
-                "about {} yd",
-                (d / 10.0).round() * 10.0
-            ))
+            nearest.map_or("none".to_string(), yards)
         ));
     }
     if bound {
@@ -266,6 +404,12 @@ fn named_object_near(facts: &HeldItemFacts, objects: &Objects, here: &Here, text
     })
 }
 
+/// A distance for the reasons, coarse so walking about does not rewrite the list each scan.
+fn yards(d: f32) -> String {
+    let step = if d < 100.0 { 10.0 } else { 100.0 };
+    format!("about {} yd", (d / step).round() * step)
+}
+
 /// `s` as a Lua string literal.
 fn lua_string(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
@@ -286,7 +430,37 @@ fn lua_string(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::lua_string;
+    use super::{Here, Spots, lua_string};
+    use bevy::math::Vec3;
+
+    #[test]
+    fn spots_parse_and_the_nearest_counts_its_radius() {
+        let spots = Spots::parse(
+            "item\t5000\t1\t10.0\t20.0\t30.0\t15\nfocus\t42\t1\t0\t0\t0\t10\nbad line\n\
+             item\t5000\t0\t10.0\t20.0\t30.0\t15\n",
+        );
+        assert_eq!(spots.items[&5000].len(), 2);
+        assert_eq!(spots.focus[&42].len(), 1);
+        let here = |x: f32| Here {
+            area: None,
+            map: Some(1),
+            at: Some(Vec3::new(x, 20.0, 30.0)),
+        };
+        assert_eq!(
+            Spots::nearest(&spots.items[&5000], &here(20.0)),
+            Some((10.0, true))
+        );
+        assert_eq!(
+            Spots::nearest(&spots.items[&5000], &here(40.0)),
+            Some((30.0, false))
+        );
+        let elsewhere = Here {
+            area: None,
+            map: Some(530),
+            at: Some(Vec3::ZERO),
+        };
+        assert_eq!(Spots::nearest(&spots.items[&5000], &elsewhere), None);
+    }
 
     #[test]
     fn a_lua_string_escapes_quotes_and_lines() {
