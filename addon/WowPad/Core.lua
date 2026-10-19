@@ -1395,6 +1395,7 @@ SlashCmdList["WOWPAD"] = function(msg)
   if cmd == "debug" then
     WowPadDB.debug = not WowPadDB.debug
     Print("Debug messages " .. (WowPadDB.debug and "on" or "off"))
+    if WowPadDB.debug and WP.QuestItem then WP.QuestItem.Dump() end
   elseif cmd == "save" then
     -- Saved variables are written only when the UI shuts down; a UI reload is one, short of a logout.
     Print("Saving settings (reloading the UI)...")

@@ -3,36 +3,44 @@
 -- calls WowPad_QuestItems(list) when the list changes, each row { bag, slot, "here" } (the item's
 -- zone, or the object its spell needs, is right here) or { bag, slot, "target", text } (no place
 -- binding: shown while the target's name is in the item's spell text). A { bag, slot, "no", why }
--- row is one that is not ready; /wp debug prints why. /wp questitem turns the hint off.
+-- row is a quest item bound to somewhere else; /wp debug prints why. With none of them sure, the
+-- hint still offers the first quest item, faded: LT + RT + L3 always uses a quest item, and the
+-- game says so when the place is wrong. /wp questitem turns the hint off.
 
 local WP = WowPad
 local M = {}
 WP.QuestItem = M
 local items = {}
-local pick
+local pick, sure
 local frame, icon, line
 
 local function Enabled() return not (WowPadDB and WowPadDB.questItem == false) end
 
--- The first item that works here, else the first whose text names the target.
+-- The first item that works here, else the first whose text names the target (both sure), else
+-- the first quest item with a use at all.
 local function Pick()
   for i = 1, table.getn(items) do
-    if items[i][3] == "here" then return items[i] end
+    if items[i][3] == "here" then return items[i], true end
   end
   local name = UnitExists("target") and not UnitIsUnit("target", "player") and UnitName("target")
-  if not name or string.len(name) < 3 then return nil end
-  name = string.lower(name)
-  for i = 1, table.getn(items) do
-    local row = items[i]
-    if row[3] == "target" and row[4] and string.find(string.lower(row[4]), name, 1, true) then
-      return row
+  if name and string.len(name) >= 3 then
+    name = string.lower(name)
+    for i = 1, table.getn(items) do
+      local row = items[i]
+      if row[3] == "target" and row[4] and string.find(string.lower(row[4]), name, 1, true) then
+        return row, true
+      end
     end
   end
-  return nil
+  for i = 1, table.getn(items) do
+    if items[i][3] == "target" or items[i][3] == "no" then return items[i], false end
+  end
+  return nil, false
 end
 
 function M.Update()
-  pick = Enabled() and Pick() or nil
+  pick, sure = nil, false
+  if Enabled() then pick, sure = Pick() end
   if not frame then return end
   local texture = pick and GetContainerItemInfo(pick[1], pick[2])
   local show = texture and WP.mode == "controller" and not (WP.MenuContext and WP.MenuContext())
@@ -40,6 +48,8 @@ function M.Update()
   local link = GetContainerItemLink(pick[1], pick[2])
   local _, _, name = link and string.find(link, "%[(.+)%]")
   icon:SetTexture(texture)
+  -- Sure: full and bright. A guess: faded, still there to press.
+  frame:SetAlpha(sure and 1 or 0.45)
   frame:SetWidth(line:SetParts({ { key = "LT + RT + L3", text = "Use " .. (name or "item") } }, 4)
     + 34 + 16)
   frame:Show()
@@ -52,17 +62,21 @@ function M.Use()
   return true
 end
 
+-- /wp debug: what each listed item is, and why it is not ready.
+function M.Dump()
+  if table.getn(items) == 0 then WP.Print("quest items: none with a use in your bags") end
+  for i = 1, table.getn(items) do
+    local row = items[i]
+    if row[3] == "no" then WP.Print("quest item not ready: " .. (row[4] or "?"))
+    elseif row[3] == "skip" then WP.Print("item skipped: " .. (row[4] or "?"))
+    else WP.Print("quest item " .. row[3] .. ": " .. (GetContainerItemLink(row[1], row[2]) or "?")) end
+  end
+end
+
 -- Called by benilla-wowpad when the list changes.
 function WowPad_QuestItems(list)
   items = list or {}
-  if WowPadDB and WowPadDB.debug then
-    for i = 1, table.getn(items) do
-      local row = items[i]
-      local name = GetContainerItemLink(row[1], row[2]) or "?"
-      if row[3] == "no" then WP.Print("quest item not ready: " .. (row[4] or "?"))
-      else WP.Print("quest item " .. row[3] .. ": " .. name) end
-    end
-  end
+  if WowPadDB and WowPadDB.debug then M.Dump() end
   M.Update()
 end
 

@@ -188,11 +188,11 @@ off.
 
 ### Quick-use quest items
 
-When a quest item in your bags can be used where you stand, a hint with its icon shows above the
-bar and LT + RT + L3 uses it. benilla tells WowPad when the item's zone, or the object its spell
-needs (an altar, a campfire), is right here. Items you use on a creature have no place the client
-knows, so their hint shows while your target's name is in the item's text. `/wp questitem` turns
-the hint off.
+LT + RT + L3 uses the quest item in your bags; a hint with its icon shows above the bar. The hint
+lights up when WowPad is sure you are in the right spot: the item's zone, or the object its spell
+needs (an altar, a campfire), is right here, or the item's text names your target or a clickable
+object next to you (the well a waterskin is filled at). Otherwise it stays faded, still ready to
+press, and the game tells you if the place is wrong. `/wp questitem` turns the hint off.
 
 ### In menus (a window open, out of combat)
 
