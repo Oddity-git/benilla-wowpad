@@ -42,10 +42,10 @@ index df10082b7..19e07ef16 100644
          Self::key(fields).and_then(|e| self.templates.get(e))
 diff --git a/crates/benilla-app/src/held_items.rs b/crates/benilla-app/src/held_items.rs
 new file mode 100644
-index 000000000..2dc3fcdea
+index 000000000..7b364a48a
 --- /dev/null
 +++ b/crates/benilla-app/src/held_items.rs
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,57 @@
 +//! Deviation (for crates on top, as benilla-wowpad): the facts about a held item that say where
 +//! its use works, which 1.12.1's interface has no call for. The client already holds each one:
 +//! the item template's zone and map binding, the use spell's `RequiresSpellFocus`, and a spell
@@ -95,11 +95,6 @@ index 000000000..2dc3fcdea
 +    /// cached.
 +    pub fn object_spell_focus(&self, entry: u32) -> Option<(u32, f32)> {
 +        self.objects.as_ref()?.spell_focus(entry)
-+    }
-+
-+    /// A game object's name by its entry, once its template is cached.
-+    pub fn object_name(&self, entry: u32) -> Option<&str> {
-+        self.objects.as_ref()?.name(entry)
 +    }
 +
 +    /// The zone an `AreaTable` id lies in: the area itself for a zone, else its parent.
