@@ -1,8 +1,10 @@
 -- QuestItem.lua - the quick-use quest item: a hint when a quest item in the bags can be used
 -- here, and LT + RT + L3 uses it. benilla-wowpad looks through the bags a few times a second and
--- calls WowPad_QuestItems(list) when the list changes, each row { bag, slot, "here" } (the item's
--- zone, or the object its spell needs, is right here) or { bag, slot, "target", text } (no place
--- binding: shown while the target's name is in the item's spell text). A { bag, slot, "no", why }
+-- calls WowPad_QuestItems(list) when the list changes, each row { bag, slot, kind, text, name,
+-- spell text }:
+-- "here" (the item's zone, or the object its spell needs, is right here) or "target" (no place
+-- binding; text is its spell text, sure while it names the subzone or zone you are in, or your
+-- target: "filled with water from the Ruins of Stardust well"). A "no" row, text the reason, is
 -- row is a quest item bound to somewhere else; /wp debug prints why. With none of them sure, the
 -- hint still offers the first quest item, faded: LT + RT + L3 always uses a quest item, and the
 -- game says so when the place is wrong. /wp questitem turns the hint off.
@@ -16,21 +18,28 @@ local frame, icon, line
 
 local function Enabled() return not (WowPadDB and WowPadDB.questItem == false) end
 
--- The first item that works here, else the first whose text names the target (both sure), else
--- the first quest item with a use at all.
+-- Whether a spell text names any of the given words (case and length checked).
+local function Names(text, words)
+  if not text or text == "" then return false end
+  text = string.lower(text)
+  for i = 1, table.getn(words) do
+    local w = words[i]
+    if w and string.len(w) >= 4 and string.find(text, string.lower(w), 1, true) then return true end
+  end
+  return false
+end
+
+-- The first item that works here, else the first whose text names where you are or your target
+-- (both sure), else the first quest item with a use at all.
 local function Pick()
   for i = 1, table.getn(items) do
     if items[i][3] == "here" then return items[i], true end
   end
-  local name = UnitExists("target") and not UnitIsUnit("target", "player") and UnitName("target")
-  if name and string.len(name) >= 3 then
-    name = string.lower(name)
-    for i = 1, table.getn(items) do
-      local row = items[i]
-      if row[3] == "target" and row[4] and string.find(string.lower(row[4]), name, 1, true) then
-        return row, true
-      end
-    end
+  local target = UnitExists("target") and not UnitIsUnit("target", "player") and UnitName("target")
+  local words = { GetSubZoneText(), GetRealZoneText(), target }
+  for i = 1, table.getn(items) do
+    local row = items[i]
+    if (row[3] == "target" or row[3] == "no") and Names(row[6], words) then return row, true end
   end
   for i = 1, table.getn(items) do
     if items[i][3] == "target" or items[i][3] == "no" then return items[i], false end
@@ -45,8 +54,11 @@ function M.Update()
   local texture = pick and GetContainerItemInfo(pick[1], pick[2])
   local show = texture and WP.mode == "controller" and not (WP.MenuContext and WP.MenuContext())
   if not show then frame:Hide(); return end
-  local link = GetContainerItemLink(pick[1], pick[2])
-  local _, _, name = link and string.find(link, "%[(.+)%]")
+  local name = pick[5]
+  if not name or name == "" then
+    local _, _, linked = string.find(GetContainerItemLink(pick[1], pick[2]) or "", "%[(.+)%]")
+    name = linked
+  end
   icon:SetTexture(texture)
   -- Sure: full and bright. A guess: faded, still there to press.
   frame:SetAlpha(sure and 1 or 0.45)

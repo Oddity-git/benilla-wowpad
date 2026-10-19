@@ -88,16 +88,27 @@ pub fn scan(
     let mut list = String::new();
     for (bag, slot, entry) in held(&objects) {
         let row = match ready(&facts, &objects, &here, entry) {
-            Verdict::Here => format!("{{{bag},{slot},\"here\"}},"),
-            Verdict::Target(text) => {
-                format!("{{{bag},{slot},\"target\",{}}},", lua_string(&text))
-            }
-            Verdict::No(why) => format!("{{{bag},{slot},\"no\",{}}},", lua_string(&why)),
-            Verdict::Skip(why) if debug => {
-                format!("{{{bag},{slot},\"skip\",{}}},", lua_string(&why))
-            }
+            Verdict::Here => ("here", String::new()),
+            Verdict::Target(text) => ("target", text),
+            Verdict::No(why) => ("no", why),
+            Verdict::Skip(why) if debug => ("skip", why),
             Verdict::Skip(_) | Verdict::Silent => continue,
         };
+        // The item's name rides along for the hint's label, and its spell text for the addon's
+        // place and target match (also on a "no" row: an unfound focus may still be named).
+        let template = facts.template(entry);
+        let name = template.map_or("", |t| t.name.as_str());
+        let text = template
+            .and_then(|t| t.spells.iter().find(|s| s.trigger == TRIGGER_ON_USE))
+            .and_then(|s| facts.spell_description(s.spell_id))
+            .unwrap_or_default();
+        let row = format!(
+            "{{{bag},{slot},\"{}\",{},{},{}}},",
+            row.0,
+            lua_string(&row.1),
+            lua_string(name),
+            lua_string(text)
+        );
         list.push_str(&row);
     }
     if state.sent.as_deref() == Some(list.as_str()) {
