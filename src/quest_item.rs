@@ -6,6 +6,8 @@
 //! in, or its spell needs a focus object (an altar, a campfire) and one is within its radius. An
 //! item with neither binding is listed as *target* with its spell's text: only the server knows
 //! which creature it works on, so the addon shows it when the text names the player's target.
+//! One that is place-bound but not ready is listed as *no* with the reason, which `/wp debug`
+//! prints.
 
 use benilla_app::{HeldItemFacts, ObjectType, Objects};
 use benilla_ui::script::UiScript;
@@ -62,19 +64,21 @@ pub fn scan(
     let here = Here {
         area: area.and_then(|a| a.0),
         map: map.map(|m| m.0),
-        at: objects
-            .player()
-            .and_then(|p| places.get(p).ok())
-            .map(GlobalTransform::translation),
+        // In WoW coordinates, as the objects' own positions are.
+        at: objects.player().and_then(|p| places.get(p).ok()).map(|t| {
+            let b = t.translation();
+            Vec3::new(-b.z, -b.x, b.y)
+        }),
     };
     let mut list = String::new();
     for (bag, slot, entry) in held(&objects) {
-        let Some(ready) = ready(&facts, &objects, &places, &here, entry) else {
-            continue;
-        };
-        let row = match ready {
-            Ready::Here => format!("{{{bag},{slot},\"here\"}},"),
-            Ready::Target(text) => format!("{{{bag},{slot},\"target\",{}}},", lua_string(&text)),
+        let row = match ready(&facts, &objects, &here, entry) {
+            Ok(Ready::Here) => format!("{{{bag},{slot},\"here\"}},"),
+            Ok(Ready::Target(text)) => {
+                format!("{{{bag},{slot},\"target\",{}}},", lua_string(&text))
+            }
+            Err(Some(why)) => format!("{{{bag},{slot},\"no\",{}}},", lua_string(&why)),
+            Err(None) => continue,
         };
         list.push_str(&row);
     }
@@ -130,53 +134,86 @@ fn held(objects: &Objects) -> Vec<(u8, u8, u32)> {
     out
 }
 
-/// Whether a held item is a quest item whose use works here, and how.
+/// Whether a held item's use works here, and how. `Err(None)` for an item this is not about,
+/// `Err(Some(why))` for one that is but is not ready, for `/wp debug`.
 fn ready(
     facts: &HeldItemFacts,
     objects: &Objects,
-    places: &Query<&GlobalTransform>,
     here: &Here,
     entry: u32,
-) -> Option<Ready> {
-    let item = facts.template(entry)?;
-    if item.class != CLASS_QUEST && item.bonding != BONDING_QUEST {
-        return None;
-    }
+) -> Result<Ready, Option<String>> {
+    let item = facts.template(entry).ok_or(None)?;
     let spell = item
         .spells
         .iter()
-        .find(|s| s.trigger == TRIGGER_ON_USE && s.spell_id != 0)?
+        .find(|s| s.trigger == TRIGGER_ON_USE && s.spell_id != 0)
+        .ok_or(None)?
         .spell_id;
     let focus = facts.spell_focus(spell);
+    // A place-bound use is a quest item's whatever its class; an unbound one only for a quest item.
+    let bound = item.area != 0 || item.map != 0 || focus != 0;
+    if !bound && item.class != CLASS_QUEST && item.bonding != BONDING_QUEST {
+        return Err(None);
+    }
+    let name = &item.name;
     if item.map != 0 && here.map != Some(item.map) {
-        return None;
+        return Err(Some(format!(
+            "{name}: map {} (here {:?})",
+            item.map, here.map
+        )));
     }
     if item.area != 0 {
-        let area = here.area?;
-        if area != item.area && facts.zone_of(area) != Some(item.area) {
-            return None;
+        let area = here.area;
+        let zone = area.and_then(|a| facts.zone_of(a));
+        if area != Some(item.area) && zone != Some(item.area) {
+            return Err(Some(format!(
+                "{name}: area {} (here {area:?}, zone {zone:?})",
+                item.area
+            )));
         }
     }
     if focus != 0 {
-        let at = here.at?;
-        let near = objects.iter().any(|(_, e, f)| {
-            f.object_type() == Some(ObjectType::GameObject)
-                && f.gameobject_type_id() == GO_SPELL_FOCUS
-                && f.object_entry()
-                    .and_then(|entry| facts.object_spell_focus(entry))
-                    .is_some_and(|(id, radius)| {
-                        id == focus
-                            && places
-                                .get(e)
-                                .is_ok_and(|t| t.translation().distance(at) <= radius.max(5.0))
-                    })
-        });
-        return near.then_some(Ready::Here);
+        let at = here
+            .at
+            .ok_or_else(|| Some(format!("{name}: no position yet")))?;
+        let mut nearest: Option<f32> = None;
+        let mut focus_objects = 0;
+        for (_, _, f) in objects.iter() {
+            if f.object_type() != Some(ObjectType::GameObject)
+                || f.gameobject_type_id() != GO_SPELL_FOCUS
+            {
+                continue;
+            }
+            focus_objects += 1;
+            let Some((id, radius)) = f.object_entry().and_then(|e| facts.object_spell_focus(e))
+            else {
+                continue;
+            };
+            let Some((pos, _)) = f.gameobject_position().filter(|_| f.gameobject_pos_sent()) else {
+                continue;
+            };
+            if id != focus {
+                continue;
+            }
+            let d = Vec3::new(pos.x, pos.y, pos.z).distance(at);
+            if d <= radius.max(5.0) {
+                return Ok(Ready::Here);
+            }
+            nearest = Some(nearest.map_or(d, |n| n.min(d)));
+        }
+        return Err(Some(format!(
+            "{name}: needs focus {focus}; {focus_objects} focus objects streamed, nearest match {}",
+            // In 10 yd steps, so walking about does not rewrite the list each scan.
+            nearest.map_or("none".to_string(), |d| format!(
+                "about {} yd",
+                (d / 10.0).round() * 10.0
+            ))
+        )));
     }
-    if item.area != 0 || item.map != 0 {
-        return Some(Ready::Here);
+    if bound {
+        return Ok(Ready::Here);
     }
-    Some(Ready::Target(
+    Ok(Ready::Target(
         facts
             .spell_description(spell)
             .unwrap_or_default()

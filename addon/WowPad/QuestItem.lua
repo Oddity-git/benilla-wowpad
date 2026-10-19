@@ -2,7 +2,8 @@
 -- here, and LT + RT + L3 uses it. benilla-wowpad looks through the bags a few times a second and
 -- calls WowPad_QuestItems(list) when the list changes, each row { bag, slot, "here" } (the item's
 -- zone, or the object its spell needs, is right here) or { bag, slot, "target", text } (no place
--- binding: shown while the target's name is in the item's spell text). /wp questitem turns it off.
+-- binding: shown while the target's name is in the item's spell text). A { bag, slot, "no", why }
+-- row is one that is not ready; /wp debug prints why. /wp questitem turns the hint off.
 
 local WP = WowPad
 local M = {}
@@ -54,6 +55,14 @@ end
 -- Called by benilla-wowpad when the list changes.
 function WowPad_QuestItems(list)
   items = list or {}
+  if WowPadDB and WowPadDB.debug then
+    for i = 1, table.getn(items) do
+      local row = items[i]
+      local name = GetContainerItemLink(row[1], row[2]) or "?"
+      if row[3] == "no" then WP.Print("quest item not ready: " .. (row[4] or "?"))
+      else WP.Print("quest item " .. row[3] .. ": " .. name) end
+    end
+  end
   M.Update()
 end
 
