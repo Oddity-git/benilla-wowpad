@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Quick-use quest items: when a quest item in your bags can be used where you stand (its zone, or
+  the altar or campfire its spell needs, is right here), or names your target, a hint shows above
+  the bar and LT + RT + L3 uses it. `/wp questitem` turns it off.
 - The WowPad button sits inside the game menu, under Macros, instead of under the menu where
   the button hint covered it.
 - The lite bar's trigger hint (LT, RT, LT+RT) shows its button names again on the newest Benilla.

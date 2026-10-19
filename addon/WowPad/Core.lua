@@ -1265,6 +1265,7 @@ local ON_DOWN = {
   CAM_IDLE        = CamIdle,
   CAM_ACTIVE      = CamActive,
   L3              = function()
+    if WP.QuestItem and WP.QuestItem.Use() then return end
     if MenuContext() then
       if WP.OpenItemActions then WP.OpenItemActions() end
     else
@@ -1402,6 +1403,8 @@ SlashCmdList["WOWPAD"] = function(msg)
     WowPadDB.interactPrompt = not (WowPadDB.interactPrompt ~= false)
     Print("Interact prompt (X over what X would use): " .. ((WowPadDB.interactPrompt ~= false) and "on" or "off"))
     if WP.Prompt then WP.Prompt.Update() end
+  elseif cmd == "questitem" then
+    if WP.QuestItem then WP.QuestItem.Toggle() end
   elseif cmd == "xattack" then
     WowPadDB.xAttack = not WowPadDB.xAttack
     Print("X also starts attack: " .. (WowPadDB.xAttack and "on" or "off"))

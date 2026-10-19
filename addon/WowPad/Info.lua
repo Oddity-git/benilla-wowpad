@@ -11,6 +11,7 @@ local LEFT = {
   { "LB + R stick", "Healer mode (down / up)" },
   { "LT (hold)",    "Left action set" },
   { "LT + RT",      "Bottom action set" },
+  { "LT + RT + L3", "Use the quest item shown" },
   { "D-pad",        "Action slots" },
   { "Back",         "Map (hold: bags)" },
   { "Back+A / B",   "Keyboard / close" },
@@ -29,7 +30,7 @@ local RIGHT = {
 
 local F = CreateFrame("Frame", "WowPadInfo", UIParent)
 F:SetWidth(580)
-F:SetHeight(352)
+F:SetHeight(378)
 F:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
 F:SetFrameStrata("DIALOG")
 F:EnableMouse(true)

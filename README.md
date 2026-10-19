@@ -186,6 +186,14 @@ herb, vein or mailbox), an X icon shows over it. X then acts on it without targe
 target stays yours. In a fight with a target, X stays on the target. `/wp prompt` turns the icon
 off.
 
+### Quick-use quest items
+
+When a quest item in your bags can be used where you stand, a hint with its icon shows above the
+bar and LT + RT + L3 uses it. benilla tells WowPad when the item's zone, or the object its spell
+needs (an altar, a campfire), is right here. Items you use on a creature have no place the client
+knows, so their hint shows while your target's name is in the item's text. `/wp questitem` turns
+the hint off.
+
 ### In menus (a window open, out of combat)
 
 | Button | Does |
