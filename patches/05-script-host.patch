@@ -1,0 +1,38 @@
+diff --git a/crates/benilla-app/src/lib.rs b/crates/benilla-app/src/lib.rs
+index c902199b7..854568690 100644
+--- a/crates/benilla-app/src/lib.rs
++++ b/crates/benilla-app/src/lib.rs
+@@ -209,6 +209,7 @@ pub use bevy::app::AppExit;
+ // A crate on top of benilla reads objects and interacts through these, with no protocol dependency.
+ pub use benilla_protocol::{messages::ObjectType, ObjectFields};
+ pub use net::Objects;
++pub use script_calls::HostedVm;
+ pub use target::Interact;
+ 
+ /// Builds and runs the client app. `build` is the launcher's compile-time git stamp, passed in as
+diff --git a/crates/benilla-app/src/script_calls.rs b/crates/benilla-app/src/script_calls.rs
+index 1653efcb6..e92c78cc7 100644
+--- a/crates/benilla-app/src/script_calls.rs
++++ b/crates/benilla-app/src/script_calls.rs
+@@ -902,8 +902,11 @@ pub(crate) fn lent<R>(
+ /// The VM a system runs Lua on, with the call host to lend it ([`HostedVm::run`]): the param a
+ /// system that holds the VM takes, so whatever Lua it runs (an event's handlers, a widget's
+ /// script, an `OnUpdate`, a chunk) makes calls that apply inside the verb.
++///
++/// Deviation, for a crate on top: public, so a gamepad addon's driver runs the addon's Lua with the
++/// host lent (without it a verb such as `UseAction` or `TargetNearest` is refused).
+ #[derive(SystemParam)]
+-pub(crate) struct HostedVm<'w, 's> {
++pub struct HostedVm<'w, 's> {
+     script: Option<NonSendMut<'w, UiScript>>,
+     host: Option<ScriptCallHost<'w, 's>>,
+ }
+@@ -911,7 +914,7 @@ pub(crate) struct HostedVm<'w, 's> {
+ impl HostedVm<'_, '_> {
+     /// Run `f` on the VM with the host lent around all of it ([`hosted`]); `f` gets `None` with
+     /// no VM.
+-    pub(crate) fn run<R>(&mut self, f: impl FnOnce(Option<&mut UiScript>) -> R) -> R {
++    pub fn run<R>(&mut self, f: impl FnOnce(Option<&mut UiScript>) -> R) -> R {
+         hosted(&mut self.script, &mut self.host, f)
+     }
+ }

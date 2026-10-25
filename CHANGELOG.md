@@ -2,10 +2,16 @@
 
 ## 0.2.2
 
-**Update:** pull WowPad and run the installer again. Fixes 0.2.1's engine patch 01: with it the
-game stopped with "no call host is lent for this script call" when WowPad restored your bar at
-login, the bar's spells and macros then did nothing. The installer takes the 0.2.1 copy out
-itself.
+**Update:** pull WowPad and run the installer again; it adds a third engine patch
+(`05-script-host`) and replaces patch 01 (the installer takes 0.2.1's copy out itself). Needs
+benilla's `main` of 25 Oct 2026 or later.
+
+- Spells, targeting and other game actions from the pad work on the newest benilla again. Benilla
+  now refuses a script's game calls unless the engine lends it a call host, and WowPad's pad
+  driver ran without one, so only jump, attack and menus got through. Engine patch
+  `05-script-host` makes the host reachable and the driver runs inside it.
+- Fixes 0.2.1's engine patch 01: it stopped the game with "no call host is lent for this script
+  call" when WowPad restored your bar at login, and the bar's slots never reached the game.
 
 ## 0.2.1
 

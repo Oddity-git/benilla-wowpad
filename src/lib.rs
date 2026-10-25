@@ -394,9 +394,37 @@ fn read_frame(script: &UiScript) -> Option<Frame> {
     }
 }
 
+/// The pad's tick, with the engine's call host lent around all of it: a verb the addon's Lua calls
+/// (`UseAction`, `TargetNearest`, `PlaceAction`) is refused without one.
 #[allow(clippy::too_many_arguments)]
 fn drive(
-    script: Option<NonSendMut<UiScript>>,
+    mut hosted: benilla_app::HostedVm,
+    pads: Query<(Entity, &Gamepad)>,
+    layouts: Local<HashMap<Entity, Layout>>,
+    shown: Local<Option<Layout>>,
+    swap_flip: Local<bool>,
+    cfg: Res<Config>,
+    time: Res<Time>,
+    motion: ResMut<AccumulatedMouseMotion>,
+    m: ResMut<Mapper>,
+    interact: MessageWriter<benilla_app::Interact>,
+    tail: (interact::World, ResMut<interact::Soft>, ResMut<LookAim>),
+    windows: Query<&mut Window, With<PrimaryWindow>>,
+    mouse: ResMut<ButtonInput<MouseButton>>,
+    keys: ResMut<ButtonInput<KeyCode>>,
+    key_events: MessageWriter<KeyboardInput>,
+) {
+    hosted.run(|script| {
+        drive_with(
+            script, pads, layouts, shown, swap_flip, cfg, time, motion, m, interact, tail, windows,
+            mouse, keys, key_events,
+        )
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn drive_with(
+    script: Option<&mut UiScript>,
     pads: Query<(Entity, &Gamepad)>,
     mut layouts: Local<HashMap<Entity, Layout>>,
     mut shown: Local<Option<Layout>>,
@@ -412,6 +440,7 @@ fn drive(
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut key_events: MessageWriter<KeyboardInput>,
 ) {
+    let script = script.map(|s| &*s);
     let in_world = script
         .as_ref()
         .is_some_and(|s| s.eval::<bool>("return UIParent ~= nil").unwrap_or(false));
@@ -537,7 +566,7 @@ fn drive(
         }
     }
     let mut io = Io {
-        script: &script,
+        script,
         cfg,
         now: time.elapsed_secs_f64(),
         dt: time.delta_secs(),
