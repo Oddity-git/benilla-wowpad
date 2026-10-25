@@ -186,22 +186,6 @@ herb, vein or mailbox), an X icon shows over it. X then acts on it without targe
 target stays yours. In a fight with a target, X stays on the target. `/wp prompt` turns the icon
 off.
 
-### Quick-use quest items
-
-LT + RT + L3 uses the quest item in your bags; a hint with its icon shows above the bar. The hint
-lights up when WowPad is sure you are in the right spot: the item's zone, or the object its spell
-needs (an altar, a campfire), is right here, or the item's text names your target or a clickable
-object next to you (the well a waterskin is filled at). Otherwise it stays faded, still ready to
-press, and the game tells you if the place is wrong. `/wp questitem` turns the hint off.
-
-Playing on your own cMaNGOS server, WowPad can know every quest item's spots for sure: the
-update script runs `tools/export-quest-spots.sh`, which reads, from the server's world database,
-every spawn of the creatures and objects each quest item is meant for and every spell focus
-object, into `benilla-config/wowpad-quest-spots.tsv`. An item listed there lights up within its
-spots and hides elsewhere. The server's MySQL has to be running; set `MANGOS_DB`, `MANGOS_USER`
-and `MANGOS_PASS` if yours are not `classicmangos`, `mangos` and `Admin`. The game reads the
-file again when it changes, so you can rerun the export while playing.
-
 ### In menus (a window open, out of combat)
 
 | Button | Does |

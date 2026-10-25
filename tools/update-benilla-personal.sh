@@ -110,13 +110,6 @@ for patch in crates/benilla-wowpad/patches/updates/*.patch; do
 done
 
 echo
-echo "==> Quest item spots from your server"
-# Where each quest item's use works, from the cMaNGOS world database, for the LT + RT + L3 hint.
-# Needs the server's MySQL running; the update goes on without it.
-bash "$PAD/tools/export-quest-spots.sh" "$GAME/benilla-config/wowpad-quest-spots.tsv" ||
-    echo "(skipped; the quest item hint keeps guessing until this works)"
-
-echo
 echo "==> Building (this can take a few minutes)"
 cargo build --release -p benilla-wowpad --features benilla-app/ragdoll || stop "the build failed"
 

@@ -2,11 +2,6 @@
 
 ## Unreleased
 
-- Quick-use quest items: LT + RT + L3 uses the quest item in your bags, with a hint above the bar
-  that lights up when you are in the right spot (its zone, the altar or campfire its spell needs,
-  or the target or object its text names, is right here). `/wp questitem` turns it off.
-  On your own cMaNGOS server the update script exports every quest item's spots from its world
-  database, so the hint knows the right spot for every quest, not just a guess.
 - The WowPad button sits inside the game menu, under Macros, instead of under the menu where
   the button hint covered it.
 - The lite bar's trigger hint (LT, RT, LT+RT) shows its button names again on the newest Benilla.

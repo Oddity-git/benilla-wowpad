@@ -17,7 +17,6 @@ pub mod config;
 mod glue;
 pub mod interact;
 pub mod pad;
-mod quest_item;
 
 use benilla_ui::script::UiScript;
 use bevy::input::gamepad::{GamepadConnection, GamepadConnectionEvent};
@@ -42,12 +41,11 @@ impl Plugin for WowPadPlugin {
             .insert_resource(Config::load())
             .init_resource::<Mapper>()
             .init_resource::<interact::Soft>()
-            .init_resource::<quest_item::QuestItems>()
             .init_resource::<LookAim>()
             .add_systems(Startup, addon::install_addon)
             .add_systems(
                 PreUpdate,
-                (log_pads, interact::scan, quest_item::scan, drive)
+                (log_pads, interact::scan, drive)
                     .chain()
                     .after(InputSystems),
             )

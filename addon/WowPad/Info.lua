@@ -11,7 +11,6 @@ local LEFT = {
   { "LB + R stick", "Healer mode (down / up)" },
   { "LT (hold)",    "Left action set" },
   { "LT + RT",      "Bottom action set" },
-  { "LT + RT + L3", "Use the quest item shown" },
   { "D-pad",        "Action slots" },
   { "Back",         "Map (hold: bags)" },
   { "Back+A / B",   "Keyboard / close" },
