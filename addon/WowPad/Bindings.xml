@@ -38,4 +38,5 @@
 	<Binding name="WOWPAD_RING_DIR_6" runOnUp="true">WowPad_Signal("RING_DIR_6")</Binding>
 	<Binding name="WOWPAD_RING_DIR_7" runOnUp="true">WowPad_Signal("RING_DIR_7")</Binding>
 	<Binding name="WOWPAD_RING_DIR_8" runOnUp="true">WowPad_Signal("RING_DIR_8")</Binding>
+	<Binding name="WOWPAD_DE_TARGET">WowPad_DisenchantTarget()</Binding>
 </Bindings>

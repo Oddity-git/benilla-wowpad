@@ -394,31 +394,36 @@ local function Disenchantable(link)
   return (quality or 0) >= 2 and (kind == "Armor" or kind == "Weapon")
 end
 
--- Cast, then give the spell the item once its cursor is up (it may take a frame).
-local dePending
-local deDriver = CreateFrame("Frame")
-deDriver:Hide()
-deDriver:SetScript("OnUpdate", function()
-  local d = dePending
-  if not d or GetTime() > d.untl then dePending = nil; this:Hide(); return end
-  if SpellIsTargeting() then
-    dePending = nil
-    this:Hide()
-    if GetContainerItemLink(d.bag, d.slot) == d.link then
-      PickupContainerItem(d.bag, d.slot)
-    else
-      SpellStopTargeting()
-      WP.Print("That item moved; nothing was disenchanted.")
-    end
+-- Cast, then give the spell the item once its cursor is up (it takes a frame). The bind asks the
+-- cast gate, which only an input event opens, so the Rust side runs it through a binding
+-- (WOWPAD_DE_TARGET) once the cursor is up: a timer has no input event and would be refused.
+function WowPad_DisenchantReady()
+  local d = WP.dePending
+  if not d then return false end
+  if GetTime() > d.untl or GetContainerItemLink(d.bag, d.slot) ~= d.link then
+    WP.dePending = nil
+    return false
   end
-end)
+  return SpellIsTargeting() and true or false
+end
+
+function WowPad_DisenchantTarget()
+  local d = WP.dePending
+  WP.dePending = nil
+  if not d then return end
+  if GetTime() > d.untl or GetContainerItemLink(d.bag, d.slot) ~= d.link then
+    SpellStopTargeting()
+    WP.Print("That item moved; nothing was disenchanted.")
+    return
+  end
+  PickupContainerItem(d.bag, d.slot)
+end
 
 function Nav.Disenchant(link, bag, slot)
   if not (link and bag) then return end
   ClearCursor()
   CastSpellByName(DE)
-  dePending = { link = link, bag = bag, slot = slot, untl = GetTime() + 1 }
-  deDriver:Show()
+  WP.dePending = { link = link, bag = bag, slot = slot, untl = GetTime() + 1 }
 end
 
 local disenchant = Row("WowPadItemActionsDisenchant", DE)

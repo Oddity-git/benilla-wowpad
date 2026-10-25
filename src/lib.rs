@@ -526,6 +526,16 @@ fn drive(
         }
         m.edit_focus = edit_focus;
     }
+    // A disenchant's item bind asks the cast gate, which a timer has no input event to open, so the
+    // binding runs it once the spell's cursor is up (see ItemActions.lua).
+    if script
+        .eval::<bool>("return WowPad_DisenchantReady and WowPad_DisenchantReady()")
+        .unwrap_or(false)
+    {
+        if let Err(e) = script.execute_binding("WOWPAD_DE_TARGET", true) {
+            warn!("wowpad: WOWPAD_DE_TARGET failed: {e}");
+        }
+    }
     let mut io = Io {
         script: &script,
         cfg,
