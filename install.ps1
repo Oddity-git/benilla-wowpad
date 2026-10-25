@@ -116,12 +116,11 @@ function Already-In($p) {
     return $found
 }
 
-function Apply-Patch($p) {
+function Try-Patch($p) {
     $name = [IO.Path]::GetFileNameWithoutExtension($p)
-    if (Already-In $p) { Write-Host "  ${name}: already in"; return }
     if (Run git @("apply", "--check", $p)) {
         if (-not (Run git @("apply", $p) -Show)) { Stop-Install "patch $name failed to apply" }
-        Write-Host "  ${name}: applied"; return
+        Write-Host "  ${name}: applied"; return $true
     }
     # Benilla moved on since the patch was made (or Git wrote its files with Windows line ends):
     # a three-way merge places it by content. On a conflict the files go back as they were.
@@ -132,7 +131,7 @@ function Apply-Patch($p) {
         $merged = Run git @("apply", "-3", $p)
         $conflicts = & git -C $Root diff --name-only --diff-filter=U
         if ($merged -and -not $conflicts) {
-            Remove-Item $saved; Write-Host "  ${name}: applied (merged)"; return
+            Remove-Item $saved; Write-Host "  ${name}: applied (merged)"; return $true
         }
         Run git (@("checkout", "-q", "HEAD", "--") + $files) | Out-Null
         if ((Get-Item $saved).Length -gt 0) { Run git @("apply", $saved) | Out-Null }
@@ -140,14 +139,33 @@ function Apply-Patch($p) {
     }
     if (Run git @("apply", "--check", "--ignore-whitespace", $p)) {
         if (-not (Run git @("apply", "--ignore-whitespace", $p) -Show)) { Stop-Install "patch $name failed to apply" }
-        Write-Host "  ${name}: applied"; return
+        Write-Host "  ${name}: applied"; return $true
     }
     # A fork that changed the lines next to WowPad's: place each hunk by its nearest context.
     if ($patchExe -and (Run $patchExe @("--dry-run", "-p1", "-N", "-F3", "-l", "-s", "-i", $p))) {
         if (-not (Run $patchExe @("-p1", "-N", "-F3", "-l", "-s", "--no-backup-if-mismatch", "-i", $p) -Show)) {
             Stop-Install "patch $name failed to apply"
         }
-        Write-Host "  ${name}: applied (placed by nearby lines: build to check it)"; return
+        Write-Host "  ${name}: applied (placed by nearby lines: build to check it)"; return $true
+    }
+    return $false
+}
+
+# A patch, in the version for the newest benilla, else (an older benilla) the one before it, kept in
+# patches\legacy. An older version this checkout already carries is taken out first, since the
+# newer one is written for the code without it.
+function Apply-Patch($p) {
+    $name = [IO.Path]::GetFileNameWithoutExtension($p)
+    $old = Join-Path (Join-Path (Split-Path $p) "legacy") "$name.patch"
+    if ((Test-Path $old) -and -not (Run git @("apply", "--reverse", "--check", "--ignore-whitespace", $p)) -and
+        (Run git @("apply", "--reverse", "--check", "--ignore-whitespace", $old))) {
+        if (Run git @("apply", "--reverse", "--ignore-whitespace", $old)) { Write-Host "  ${name}: older version taken out" }
+    }
+    if (Already-In $p) { Write-Host "  ${name}: already in"; return }
+    if (Try-Patch $p) { return }
+    if (Test-Path $old) {
+        Write-Host "  ${name}: does not fit this benilla; trying the older version"
+        if (Try-Patch $old) { return }
     }
     Patch-Files $p | ForEach-Object { Write-Host "    touches: $_" }
     Stop-Install "patch $name does not fit this benilla version. Update WowPad (git pull in $Src) and run again; if it still fails, the patch needs refreshing for this benilla"
@@ -167,6 +185,10 @@ if ($Remove) {
         if (Run git @("apply", "--reverse", "--check", "--ignore-whitespace", $p.FullName)) {
             Run git @("apply", "--reverse", "--ignore-whitespace", $p.FullName) | Out-Null
             Write-Host "  $($p.BaseName): removed"
+        } elseif ((Test-Path (Join-Path $p.DirectoryName "legacy\$($p.Name)")) -and
+            (Run git @("apply", "--reverse", "--check", "--ignore-whitespace", (Join-Path $p.DirectoryName "legacy\$($p.Name)")))) {
+            Run git @("apply", "--reverse", "--ignore-whitespace", (Join-Path $p.DirectoryName "legacy\$($p.Name)")) | Out-Null
+            Write-Host "  $($p.BaseName): removed (older version)"
         } elseif ($patchExe -and (Run $patchExe @("--dry-run", "-R", "-p1", "-F3", "-l", "-s", "-i", $p.FullName))) {
             Run $patchExe @("-R", "-p1", "-F3", "-l", "-s", "--no-backup-if-mismatch", "-i", $p.FullName) | Out-Null
             Write-Host "  $($p.BaseName): removed (placed by nearby lines)"
