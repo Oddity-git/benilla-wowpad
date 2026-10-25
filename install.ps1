@@ -157,9 +157,15 @@ function Try-Patch($p) {
 function Apply-Patch($p) {
     $name = [IO.Path]::GetFileNameWithoutExtension($p)
     $old = Join-Path (Join-Path (Split-Path $p) "legacy") "$name.patch"
-    if ((Test-Path $old) -and -not (Run git @("apply", "--reverse", "--check", "--ignore-whitespace", $p)) -and
-        (Run git @("apply", "--reverse", "--check", "--ignore-whitespace", $old))) {
-        if (Run git @("apply", "--reverse", "--ignore-whitespace", $old)) { Write-Host "  ${name}: older version taken out" }
+    if (-not (Run git @("apply", "--reverse", "--check", "--ignore-whitespace", $p))) {
+        $legacyDir = Join-Path (Split-Path $p) "legacy"
+        if (Test-Path $legacyDir) {
+            foreach ($prev in (Get-ChildItem $legacyDir -Filter "$name*.patch")) {
+                if (Run git @("apply", "--reverse", "--check", "--ignore-whitespace", $prev.FullName)) {
+                    if (Run git @("apply", "--reverse", "--ignore-whitespace", $prev.FullName)) { Write-Host "  ${name}: older version taken out" }
+                }
+            }
+        }
     }
     if (Already-In $p) { Write-Host "  ${name}: already in"; return }
     if (Try-Patch $p) { return }

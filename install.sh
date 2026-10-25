@@ -110,9 +110,13 @@ apply_patch() {
     local p="$1" name old
     name="$(basename "$p" .patch)"
     old="$(dirname "$p")/legacy/$name.patch"
-    if [ -f "$old" ] && ! (cd "$ROOT" && git apply --reverse --check "$p" 2>/dev/null) &&
-        (cd "$ROOT" && git apply --reverse --check "$old" 2>/dev/null); then
-        (cd "$ROOT" && git apply --reverse "$old") && echo "  $name: older version taken out"
+    if ! (cd "$ROOT" && git apply --reverse --check "$p" 2>/dev/null); then
+        for prev in "$(dirname "$p")/legacy/$name"*.patch; do
+            [ -f "$prev" ] || continue
+            if (cd "$ROOT" && git apply --reverse --check "$prev" 2>/dev/null); then
+                (cd "$ROOT" && git apply --reverse "$prev") && echo "  $name: older version taken out"
+            fi
+        done
     fi
     if already_in "$p"; then
         echo "  $name: already in"

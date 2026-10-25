@@ -38,6 +38,46 @@ index d59792d16..9d1a6e5ba 100644
          let Some(slots) = self.slots.as_deref_mut() else {
              return;
          };
+diff --git a/crates/benilla-app/src/ui_action/feed.rs b/crates/benilla-app/src/ui_action/feed.rs
+index cc18361f2..29eddc23c 100644
+--- a/crates/benilla-app/src/ui_action/feed.rs
++++ b/crates/benilla-app/src/ui_action/feed.rs
+@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
+ 
+ use bevy::prelude::*;
+ 
+-use benilla_protocol::messages::{ACTION_KIND_ITEM, ACTION_KIND_SPELL};
++use benilla_protocol::messages::{ActionButton, ACTION_KIND_ITEM, ACTION_KIND_SPELL};
+ use benilla_ui::script::macro_slot_id;
+ use benilla_ui::script::{ActionSlot, ScriptValue};
+ 
+@@ -164,6 +164,26 @@ pub(super) fn feed_actions(
+             return Vec::new();
+         };
+         let mut signals = Vec::new();
++        // Deviation: the client-only slots a crate on top wrote (`SetClientAction`), which no call
++        // carries as nothing is sent for them.
++        for (id, packed) in script.take_client_action_sets() {
++            let Ok(slot) = u8::try_from(id.saturating_sub(1)) else {
++                continue;
++            };
++            if packed == 0 {
++                slots.buttons.remove(&slot);
++            } else {
++                slots.buttons.insert(
++                    slot,
++                    ActionButton {
++                        slot,
++                        action: packed & 0x00FF_FFFF,
++                        kind: (packed >> 24) as u8,
++                    },
++                );
++            }
++            slots.dirty = true;
++        }
+         let memory = memory.get(script);
+         let store = self_q.iter().next();
+         // The identity resolve reruns on a new VM, a bar edit, a macro edit or a landed item
 diff --git a/crates/benilla-app/src/ui_action/mod.rs b/crates/benilla-app/src/ui_action/mod.rs
 index ee90de4ae..73bffa824 100644
 --- a/crates/benilla-app/src/ui_action/mod.rs
@@ -68,13 +108,13 @@ index bc797bebd..1569f9182 100644
              button: slot,
              packed,
 diff --git a/crates/benilla-ui/src/script/action.rs b/crates/benilla-ui/src/script/action.rs
-index 9c8db4aae..01696e645 100644
+index 9c8db4aae..01f2aa1db 100644
 --- a/crates/benilla-ui/src/script/action.rs
 +++ b/crates/benilla-ui/src/script/action.rs
-@@ -47,6 +47,14 @@ pub enum ActionBarCall {
-     /// sent, ahead of the `ACTIONBAR_SLOT_CHANGED` the VM signals after it (`0x4e5998`).
+@@ -48,6 +48,15 @@ pub enum ActionBarCall {
      Set { id: u32, packed: u32 },
  }
+ 
 +/// Deviation, for a crate on top (a gamepad addon's own bar): Lua action ids 121-256 are
 +/// client-only slots past the reference's 120. They work like any slot (icon, range, usable,
 +/// cooldown, `UseAction`, `PickupAction`/`PlaceAction`) but never reach the server, so the
@@ -83,10 +123,24 @@ index 9c8db4aae..01696e645 100644
 +pub(crate) const CLIENT_ACTION_FIRST: u32 = 121;
 +/// The last client-only Lua action id: the wire slot index is a byte.
 +pub(crate) const CLIENT_ACTION_LAST: u32 = 256;
- 
++
  /// What one action slot shows; the app resolves the icon before pushing.
  #[derive(Clone, Debug, Default, PartialEq)]
-@@ -321,6 +329,54 @@ impl super::UiScript {
+ pub struct ActionSlot {
+@@ -300,6 +309,12 @@ impl super::UiScript {
+         })
+     }
+ 
++    /// Deviation, for a crate on top: the client-only slot writes (`SetClientAction`) since the last
++    /// call, as `(lua action id, packed)`, `packed == 0` clearing the slot.
++    pub fn take_client_action_sets(&mut self) -> Vec<(u32, u32)> {
++        std::mem::take(&mut self.model_mut().client_action_sets)
++    }
++
+     /// Drain the GlobalStrings keys of engine-side refusals; the app fires `UI_ERROR_MESSAGE` for
+     /// each, where the reference calls `CGGameUI::DisplayError` inline.
+     pub fn take_ui_errors(&mut self) -> Vec<&'static str> {
+@@ -321,6 +336,50 @@ impl super::UiScript {
  pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
      let g = lua.globals();
  
@@ -97,9 +151,9 @@ index 9c8db4aae..01696e645 100644
 +            if !(CLIENT_ACTION_FIRST..=CLIENT_ACTION_LAST).contains(&id) {
 +                return Ok(false);
 +            }
-+            // The slot write as the reference's is (`0x4e58e0`): stored, and handed to the host in
-+            // its place; the app keeps a client-only slot off the wire.
-+            super::tick::verb(lua, |model| match kind.zip(action) {
++            // Stored here and queued for the app's store: no host is needed, as nothing is sent.
++            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
++            match kind.zip(action) {
 +                Some((kind, action)) => {
 +                    let action = action & 0x00FF_FFFF;
 +                    model.actions.insert(
@@ -110,20 +164,16 @@ index 9c8db4aae..01696e645 100644
 +                            ..ActionSlot::default()
 +                        },
 +                    );
-+                    model.call_in_verb(super::ScriptCall::ActionBar(ActionBarCall::Set {
-+                        id,
-+                        packed: (u32::from(kind) << 24) | action,
-+                    }));
++                    model
++                        .client_action_sets
++                        .push((id, (u32::from(kind) << 24) | action));
 +                }
 +                None => {
 +                    model.actions.remove(&id);
 +                    model.action_states.remove(&id);
-+                    model.call_in_verb(super::ScriptCall::ActionBar(ActionBarCall::Set {
-+                        id,
-+                        packed: 0,
-+                    }));
++                    model.client_action_sets.push((id, 0));
 +                }
-+            });
++            }
 +            Ok(true)
 +        })?,
 +    )?;
@@ -141,7 +191,7 @@ index 9c8db4aae..01696e645 100644
      g.set(
          "HasAction",
          lua.create_function(|lua, action: Value| {
-@@ -1005,4 +1061,24 @@ mod tests {
+@@ -1005,4 +1064,23 @@ mod tests {
              "{calls:?}"
          );
      }
@@ -151,7 +201,6 @@ index 9c8db4aae..01696e645 100644
 +    #[test]
 +    fn a_client_action_is_stored_read_back_and_cleared() {
 +        let mut s = UiScript::new().unwrap();
-+        s.keep_calls();
 +        assert!(s
 +            .eval::<bool>("return SetClientAction(121, 0, 133)")
 +            .unwrap());
@@ -163,6 +212,28 @@ index 9c8db4aae..01696e645 100644
 +            .unwrap());
 +        assert!(s.eval::<bool>("return SetClientAction(121)").unwrap());
 +        assert!(s.eval::<bool>("return HasAction(121) == nil").unwrap());
-+        assert_eq!(s.take_action_sets(), vec![(121, 133), (121, 0)]);
++        assert_eq!(s.take_client_action_sets(), vec![(121, 133), (121, 0)]);
 +    }
  }
+diff --git a/crates/benilla-ui/src/script/model.rs b/crates/benilla-ui/src/script/model.rs
+index ce9a8bdb4..7a816b067 100644
+--- a/crates/benilla-ui/src/script/model.rs
++++ b/crates/benilla-ui/src/script/model.rs
+@@ -609,6 +609,9 @@ pub(crate) struct Model {
+     /// GlobalStrings keys of refusals this crate raises, fired by the app as `UI_ERROR_MESSAGE`
+     /// (the reference's `DisplayError` `0x496720`), each a literal from `0xb4b498` (stride `0x14`).
+     pub(crate) ui_errors: Vec<(&'static str, super::InputEvents)>,
++    /// Deviation: the `(lua action id, packed)` writes `SetClientAction` made, for the app's store
++    /// ([`crate::script::UiScript::take_client_action_sets`]); no call, as no packet follows them.
++    pub(crate) client_action_sets: Vec<(u32, u32)>,
+ 
+     pub(crate) spellbook: spellbook::SpellBookState,
+     /// The pet's spellbook, a second array as in the reference (`0xb700f0`, `0xb6f098`).
+@@ -1501,6 +1504,7 @@ impl Model {
+             action_states: HashMap::new(),
+             bonus_bar_offset: 0,
+             ui_errors: Vec::new(),
++            client_action_sets: Vec::new(),
+             spellbook: spellbook::SpellBookState::default(),
+             pet_book: spellbook::PetBookState::default(),
+             macros: macros::MacroState::default(),

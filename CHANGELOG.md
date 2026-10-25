@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+**Update:** pull WowPad and run the installer again. Fixes 0.2.1's engine patch 01: with it the
+game stopped with "no call host is lent for this script call" when WowPad restored your bar at
+login, the bar's spells and macros then did nothing. The installer takes the 0.2.1 copy out
+itself.
+
 ## 0.2.1
 
 **Update:** pull WowPad and run the installer again. Needed on the newest benilla: upstream
