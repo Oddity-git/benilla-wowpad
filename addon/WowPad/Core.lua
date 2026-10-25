@@ -861,8 +861,6 @@ navFrame:SetScript("OnUpdate", function()
     if hl:IsShown() then hl:Hide() end
     navFocus:Hide()
     hints:Hide()
-    Nav.root = nil
-    Nav.lastTop = nil
   end
 end)
 
