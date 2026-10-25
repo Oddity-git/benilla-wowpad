@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.1
+
+**Update:** pull WowPad and run the installer again. Needed on the newest benilla: upstream
+rewrote the action bar and the pick code, and 0.2.0's two engine patches no longer fit it (the
+installer stopped with "patch 01-client-action-slots does not fit"). Both patches are refreshed;
+the installer takes an older copy of them out first, and keeps using the older copy on a benilla
+that is not new enough for the refreshed one.
+
+- The engine patches 01 (the gamepad bar's own action slots) and 02 (crosshair tooltips while the
+  camera turns) fit upstream benilla as of 25 Oct 2026 and the physics fork built on it.
+- `tools/update-benilla-personal.sh`: when the physics fork changes the lines WowPad's engine
+  patches sit on, the patch commits are taken out before the merge (the patch step puts the
+  current ones back), instead of stopping on a conflict.
+
 ## 0.2.0
 
 **Update:** pull WowPad and run the installer again; it adds the two engine patches (01 and 02)

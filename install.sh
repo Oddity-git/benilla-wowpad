@@ -103,13 +103,34 @@ already_in() {
     [ "$found" = 1 ]
 }
 
+# A patch, in the version for the newest benilla, else (an older benilla) the one before it, kept in
+# patches/legacy/. An older version this checkout already carries is taken out first, since the
+# newer one is written for the code without it.
 apply_patch() {
-    local p="$1" name
+    local p="$1" name old
     name="$(basename "$p" .patch)"
+    old="$(dirname "$p")/legacy/$name.patch"
+    if [ -f "$old" ] && ! (cd "$ROOT" && git apply --reverse --check "$p" 2>/dev/null) &&
+        (cd "$ROOT" && git apply --reverse --check "$old" 2>/dev/null); then
+        (cd "$ROOT" && git apply --reverse "$old") && echo "  $name: older version taken out"
+    fi
     if already_in "$p"; then
         echo "  $name: already in"
         return 0
     fi
+    try_patch "$p" && return 0
+    if [ -f "$old" ]; then
+        echo "  $name: does not fit this benilla; trying the older version"
+        try_patch "$old" && return 0
+    fi
+    grep '^+++ b/' "$p" | sed 's/^+++ b\//    touches: /'
+    stop "patch $name does not fit this benilla version. Update WowPad (git pull in $SRC) and run again; if it still fails, the patch needs refreshing for this benilla"
+}
+
+# Applies one patch file by the ways that work, 1 when none does.
+try_patch() {
+    local p="$1" name
+    name="$(basename "$p" .patch)"
     if (cd "$ROOT" && git apply --check "$p" 2>/dev/null); then
         (cd "$ROOT" && git apply "$p") || stop "patch $name failed to apply"
         echo "  $name: applied"
@@ -140,8 +161,7 @@ apply_patch() {
         echo "  $name: applied (placed by nearby lines: build to check it)"
         return 0
     fi
-    grep '^+++ b/' "$p" | sed 's/^+++ b\//    touches: /'
-    stop "patch $name does not fit this benilla version. Update WowPad (git pull in $SRC) and run again; if it still fails, the patch needs refreshing for this benilla"
+    return 1
 }
 
 if [ "$REMOVE" = 1 ]; then
@@ -150,6 +170,9 @@ if [ "$REMOVE" = 1 ]; then
         name="$(basename "$p" .patch)"
         if (cd "$ROOT" && git apply --reverse --check "$p" 2>/dev/null); then
             (cd "$ROOT" && git apply --reverse "$p") && echo "  $name: removed"
+        elif [ -f "$(dirname "$p")/legacy/$name.patch" ] &&
+            (cd "$ROOT" && git apply --reverse --check "$(dirname "$p")/legacy/$name.patch" 2>/dev/null); then
+            (cd "$ROOT" && git apply --reverse "$(dirname "$p")/legacy/$name.patch") && echo "  $name: removed (older version)"
         elif command -v patch >/dev/null &&
             (cd "$ROOT" && patch --dry-run -R -p1 -F3 -s < "$p" >/dev/null 2>&1); then
             (cd "$ROOT" && patch -R -p1 -F3 -s --no-backup-if-mismatch < "$p") &&

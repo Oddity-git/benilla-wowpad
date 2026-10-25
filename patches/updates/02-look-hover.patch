@@ -1,10 +1,10 @@
 diff --git a/crates/benilla-app/src/target/hover.rs b/crates/benilla-app/src/target/hover.rs
-index a835ccfc..fb7e4294 100644
+index a560c7a83..5b32c773d 100644
 --- a/crates/benilla-app/src/target/hover.rs
 +++ b/crates/benilla-app/src/target/hover.rs
-@@ -34,12 +34,13 @@ pub(super) fn update_pick_occlusion(
-     spatial: avian3d::prelude::SpatialQuery,
-     occluders: Query<(), With<PickOccluder>>,
+@@ -38,13 +38,18 @@ pub(super) fn update_pick_occlusion(
+     doodads: DoodadOccluders,
+     probe: Res<super::hover_probe::ProbeAim>,
      mut occlusion: ResMut<PickOcclusion>,
 +    (rig, look_aim): (Res<CameraControl>, Option<Res<benilla_world::view::LookAim>>),
  ) {
@@ -12,13 +12,19 @@ index a835ccfc..fb7e4294 100644
      let (Ok((camera, cam_tf)), Ok(window)) = (camera.single(), window.single()) else {
          return;
      };
--    let Some(cursor) = window.cursor_position() else {
-+    let Some(cursor) = look_point(&rig, look_aim.as_deref()).or(window.cursor_position()) else {
+-    // A cursorless window traces from the hover probe's aim, as the picks do.
+-    let Some(cursor) = window.cursor_position().or_else(|| probe.now()) else {
++    // A cursorless window traces from the hover probe's aim, as the picks do; a crate's aim point
++    // wins while the camera turns.
++    let Some(cursor) = look_point(&rig, look_aim.as_deref())
++        .or(window.cursor_position())
++        .or_else(|| probe.now())
++    else {
          return;
      };
      let Ok(ray) = camera.viewport_to_world(cam_tf, cursor) else {
-@@ -60,6 +61,11 @@ pub(super) fn update_pick_occlusion(
-     }
+@@ -79,6 +84,11 @@ pub(super) fn aim_and_trace(
+     (super::hover_probe::aim_frame, update_pick_occlusion).chain()
  }
  
 +/// Deviation ([`benilla_world::view::LookAim`]): a crate's aim point while the camera turns.
@@ -29,7 +35,7 @@ index a835ccfc..fb7e4294 100644
  /// The model instances whose parts are `unit`'s pick geometry: the body, everything it wears, and
  /// its mount. The reference's `0x480d90` walks the CM2 attachment tree (`[model+0x1dc]` head,
  /// `[+0x1e4]` sibling) and registers each model (`0x713cb0`) under one candidate, so a hit on a
-@@ -179,7 +185,7 @@ fn posed_parts<'a>(
+@@ -198,7 +208,7 @@ fn posed_parts<'a>(
  pub(super) fn update_hover(
      camera: Query<(&Camera, &GlobalTransform), With<WorldCamera>>,
      window: Query<&Window, With<PrimaryWindow>>,
@@ -38,7 +44,7 @@ index a835ccfc..fb7e4294 100644
      pointer_over_ui: Res<PointerOverUi>,
      occlusion: Res<PickOcclusion>,
      // The unit whose plate holds the hover after this frame's UI walk.
-@@ -249,14 +255,16 @@ pub(super) fn update_hover(
+@@ -268,14 +278,16 @@ pub(super) fn update_hover(
              return;
          }
      }
@@ -57,7 +63,7 @@ index a835ccfc..fb7e4294 100644
          return;
      };
      let Ok(ray) = camera.viewport_to_world(cam_tf, cursor) else {
-@@ -542,7 +550,7 @@ impl GoGateInputs<'_> {
+@@ -565,7 +577,7 @@ impl GoGateInputs<'_> {
  pub(super) fn update_hovered_object(
      camera: Query<(&Camera, &GlobalTransform), With<WorldCamera>>,
      window: Query<&Window, With<PrimaryWindow>>,
@@ -66,7 +72,7 @@ index a835ccfc..fb7e4294 100644
      pointer_over_ui: Res<PointerOverUi>,
      occlusion: Res<PickOcclusion>,
      // The unit pick, earlier in the chain: a unit hover keeps the GameObject halo shut.
-@@ -585,7 +593,8 @@ pub(super) fn update_hovered_object(
+@@ -609,7 +621,8 @@ pub(super) fn update_hovered_object(
      hovered.guid = None;
      hovered.distance = f32::MAX;
      // The sticky pick drops the moment the pointer is not ours.
@@ -76,7 +82,7 @@ index a835ccfc..fb7e4294 100644
      if yielded {
          *last_pick = None;
      }
-@@ -604,7 +613,7 @@ pub(super) fn update_hovered_object(
+@@ -622,7 +635,7 @@ pub(super) fn update_hovered_object(
      if yielded {
          return;
      }
@@ -86,7 +92,7 @@ index a835ccfc..fb7e4294 100644
      };
      if pickable.is_empty() {
 diff --git a/crates/benilla-world/src/view.rs b/crates/benilla-world/src/view.rs
-index a3ebf682..58b3885f 100644
+index ed8b8646d..4c04cd3bb 100644
 --- a/crates/benilla-world/src/view.rs
 +++ b/crates/benilla-world/src/view.rs
 @@ -289,6 +289,13 @@ pub fn within_farclip(

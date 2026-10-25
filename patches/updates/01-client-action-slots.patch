@@ -1,57 +1,64 @@
 diff --git a/crates/benilla-app/src/spell/net.rs b/crates/benilla-app/src/spell/net.rs
-index cccf3e5..9a13705 100644
+index 2e51a2653..dcd29f628 100644
 --- a/crates/benilla-app/src/spell/net.rs
 +++ b/crates/benilla-app/src/spell/net.rs
-@@ -470,5 +470,11 @@ fn spell_book(
- fn action_buttons(buttons: Vec<ActionButton>, actions: &mut PlayerActions) {
+@@ -682,7 +682,13 @@ fn spell_book(
+ /// `SMSG_ACTION_BUTTONS`, at login and on server-side edits, into the action store.
+ fn action_buttons(buttons: Vec<ActionButton>, slots: &mut crate::ui_action::ActionSlots) {
      debug!("net: action bar — {} occupied slots", buttons.len());
--    actions.buttons = buttons.into_iter().map(|b| (b.slot, b)).collect();
+-    slots.buttons = buttons.into_iter().map(|b| (b.slot, b)).collect();
 +    // The client-only slots are not the server's: the snapshot leaves them be.
-+    actions
++    slots
 +        .buttons
 +        .retain(|&slot, _| slot >= crate::ui_action::CLIENT_SLOT_FIRST);
-+    actions
++    slots
 +        .buttons
 +        .extend(buttons.into_iter().map(|b| (b.slot, b)));
-     actions.dirty = true;
+     slots.dirty = true;
  }
+ 
 diff --git a/crates/benilla-app/src/ui_action/drain.rs b/crates/benilla-app/src/ui_action/drain.rs
-index 4348dd7..10c27d2 100644
+index d59792d16..9d1a6e5ba 100644
 --- a/crates/benilla-app/src/ui_action/drain.rs
 +++ b/crates/benilla-app/src/ui_action/drain.rs
-@@ -433,8 +433,10 @@ pub(super) fn drain_action_sets(
+@@ -507,10 +507,12 @@ impl ActionBarSteps<'_> {
+         debug!(
              "ui_action: set_action_button lua {lua_id} (wire slot {slot}) packed {packed:#010x}"
          );
--        let _ = commands.0.send(ClientCommand::SetActionButton {
+-        let _ = self.net.0.send(ClientCommand::SetActionButton {
 -            button: slot,
 -            packed,
 -        });
 +        if slot < super::CLIENT_SLOT_FIRST {
-+            let _ = commands.0.send(ClientCommand::SetActionButton {
++            let _ = self.net.0.send(ClientCommand::SetActionButton {
 +                button: slot,
 +                packed,
 +            });
 +        }
-     }
- }
+         let Some(slots) = self.slots.as_deref_mut() else {
+             return;
+         };
 diff --git a/crates/benilla-app/src/ui_action/mod.rs b/crates/benilla-app/src/ui_action/mod.rs
-index e46296f..9322411 100644
+index ee90de4ae..73bffa824 100644
 --- a/crates/benilla-app/src/ui_action/mod.rs
 +++ b/crates/benilla-app/src/ui_action/mod.rs
-@@ -51,4 +51,8 @@ pub(crate) use weapon_icon::{melee_auto_attack_icon, ranged_weapon_icon, substit
+@@ -70,6 +70,10 @@ pub(crate) use weapon_icon::{melee_auto_attack_icon, ranged_weapon_icon, substit
+ /// keys on this id; the icon keys on `SPELL_EFFECT_ATTACK`, which only 6603 carries.
  pub(crate) const SPELL_ATTACK: u32 = 6603;
  
 +/// Deviation, for a crate on top: wire slots from here up (Lua action ids 121-256, the UI's
 +/// client-only slots, `SetClientAction`) are stored and used like any slot but never sent.
 +pub(crate) const CLIENT_SLOT_FIRST: u8 = 120;
 +
- /// The action slots (wire 0..119) and the known spells. The bar is client-authoritative:
- /// [`drain::drain_action_sets`] writes it directly, and vmangos stores a slot without a reply
+ /// The action slots (wire 0..119), the reference's slot arrays, which `0x4e58e0` writes inside the
+ /// call that places or clears one (`0x4e590a`), so the chunk's next verb reads the write. Apart
+ /// from [`PlayerActions`] so the call host's bar verbs hold it alone ([`ActionBarSteps`]). The bar
 diff --git a/crates/benilla-app/src/ui_action/ranks.rs b/crates/benilla-app/src/ui_action/ranks.rs
-index ba3e157..55b0ed9 100644
+index bc797bebd..1569f9182 100644
 --- a/crates/benilla-app/src/ui_action/ranks.rs
 +++ b/crates/benilla-app/src/ui_action/ranks.rs
-@@ -49,4 +49,7 @@ pub(super) fn normalize_action_ranks(
+@@ -49,6 +49,9 @@ pub(crate) fn normalize_action_ranks(
+         button.action = top;
          let packed = top | (u32::from(button.kind) << 24);
          info!("ui_action: bar slot {slot} rank-normalized {was} -> {top}");
 +        if slot >= super::CLIENT_SLOT_FIRST {
@@ -59,13 +66,15 @@ index ba3e157..55b0ed9 100644
 +        }
          let _ = commands.0.send(ClientCommand::SetActionButton {
              button: slot,
+             packed,
 diff --git a/crates/benilla-ui/src/script/action.rs b/crates/benilla-ui/src/script/action.rs
-index 2d2a68c..543c025 100644
+index 9c8db4aae..01696e645 100644
 --- a/crates/benilla-ui/src/script/action.rs
 +++ b/crates/benilla-ui/src/script/action.rs
-@@ -18,4 +18,13 @@ pub(crate) const ACTION_KIND_MACRO: u8 = 0x40;
- pub(crate) const ACTION_KIND_ITEM: u8 = 0x80;
- 
+@@ -47,6 +47,14 @@ pub enum ActionBarCall {
+     /// sent, ahead of the `ACTIONBAR_SLOT_CHANGED` the VM signals after it (`0x4e5998`).
+     Set { id: u32, packed: u32 },
+ }
 +/// Deviation, for a crate on top (a gamepad addon's own bar): Lua action ids 121-256 are
 +/// client-only slots past the reference's 120. They work like any slot (icon, range, usable,
 +/// cooldown, `UseAction`, `PickupAction`/`PlaceAction`) but never reach the server, so the
@@ -74,10 +83,11 @@ index 2d2a68c..543c025 100644
 +pub(crate) const CLIENT_ACTION_FIRST: u32 = 121;
 +/// The last client-only Lua action id: the wire slot index is a byte.
 +pub(crate) const CLIENT_ACTION_LAST: u32 = 256;
-+
+ 
  /// What one action slot shows; the app resolves the icon before pushing.
  #[derive(Clone, Debug, Default, PartialEq)]
-@@ -169,4 +178,46 @@ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
+@@ -321,6 +329,54 @@ impl super::UiScript {
+ pub(super) fn install(lua: &Lua) -> mlua::Result<()> {
      let g = lua.globals();
  
 +    // The client-only slots' store, for the addon that owns them (see `CLIENT_ACTION_FIRST`).
@@ -87,8 +97,9 @@ index 2d2a68c..543c025 100644
 +            if !(CLIENT_ACTION_FIRST..=CLIENT_ACTION_LAST).contains(&id) {
 +                return Ok(false);
 +            }
-+            let mut model = lua.app_data_mut::<Model>().expect("model app_data");
-+            match kind.zip(action) {
++            // The slot write as the reference's is (`0x4e58e0`): stored, and handed to the host in
++            // its place; the app keeps a client-only slot off the wire.
++            super::tick::verb(lua, |model| match kind.zip(action) {
 +                Some((kind, action)) => {
 +                    let action = action & 0x00FF_FFFF;
 +                    model.actions.insert(
@@ -99,15 +110,20 @@ index 2d2a68c..543c025 100644
 +                            ..ActionSlot::default()
 +                        },
 +                    );
-+                    model
-+                        .action_sets
-+                        .push((id, (u32::from(kind) << 24) | action));
++                    model.call_in_verb(super::ScriptCall::ActionBar(ActionBarCall::Set {
++                        id,
++                        packed: (u32::from(kind) << 24) | action,
++                    }));
 +                }
 +                None => {
 +                    model.actions.remove(&id);
-+                    model.action_sets.push((id, 0));
++                    model.action_states.remove(&id);
++                    model.call_in_verb(super::ScriptCall::ActionBar(ActionBarCall::Set {
++                        id,
++                        packed: 0,
++                    }));
 +                }
-+            }
++            });
 +            Ok(true)
 +        })?,
 +    )?;
@@ -124,8 +140,10 @@ index 2d2a68c..543c025 100644
 +
      g.set(
          "HasAction",
-@@ -703,3 +754,22 @@ mod tests {
-         }
+         lua.create_function(|lua, action: Value| {
+@@ -1005,4 +1061,24 @@ mod tests {
+             "{calls:?}"
+         );
      }
 +
 +    /// The client-only slots write and read like any slot, queue their write for the app, and
@@ -133,6 +151,7 @@ index 2d2a68c..543c025 100644
 +    #[test]
 +    fn a_client_action_is_stored_read_back_and_cleared() {
 +        let mut s = UiScript::new().unwrap();
++        s.keep_calls();
 +        assert!(s
 +            .eval::<bool>("return SetClientAction(121, 0, 133)")
 +            .unwrap());

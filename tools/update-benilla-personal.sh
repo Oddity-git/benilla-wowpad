@@ -45,6 +45,22 @@ fi
 
 echo "==> Physics fork"
 git fetch origin || stop "could not download the physics fork"
+# WowPad's engine patches live in this branch as commits, and benilla changes the lines around them
+# now and then, which stops the merge. When it would, take them out first (the commits are reverted,
+# newest first); the patch step below puts back the ones for the new code.
+if ! git merge-tree --write-tree HEAD origin/ragdoll >/dev/null 2>&1; then
+    patch_commits=$(git log --format=%H --grep='^WowPad engine patch:' HEAD ^origin/ragdoll)
+    if [ -n "$patch_commits" ]; then
+        echo "The physics fork changed code WowPad's engine patches sit in; taking them out for now:"
+        for c in $patch_commits; do
+            git log -1 --format='  %s' "$c"
+            git revert --no-edit "$c" >/dev/null 2>&1 || {
+                git revert --abort 2>/dev/null
+                stop "could not take out '$(git log -1 --format=%s "$c")' (something else changed the same lines)"
+            }
+        done
+    fi
+fi
 merge origin/ragdoll "physics fork"
 
 echo
