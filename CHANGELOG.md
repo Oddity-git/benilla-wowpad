@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
+
+**Update:** pull WowPad and run the installer again; it adds the two engine patches (01 and 02)
+and skips the ones already in.
+
+- Window navigation: holding LT or RT no longer sends the focus back to the first window, and
+  LT / RT swap windows whenever more than one is open, tabbed or not.
+- L3 disenchant works on the newest Benilla: the item pick now runs through a keybinding, as the
+  game only accepts it from an input event.
+- A cast bar of WowPad's own (player casts and channels, movable), with `/wp castbar` to switch it.
+- Compare plates (hold Y) use the stock shopping tooltips and never show a blank plate.
 
 - The WowPad button sits inside the game menu, under Macros, instead of under the menu where
   the button hint covered it.
