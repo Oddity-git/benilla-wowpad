@@ -1240,11 +1240,11 @@ local function SetMode(mode)
   if WP.Bar then WP.Bar.UpdateVisibility() end
 end
 
--- LT / RT with a window that has tabs (so the bumpers page them): the press swaps window, as on
--- 3.3.5. The set still shows while the trigger is held.
+-- LT / RT swap windows whenever more than one is open (the bumpers page a window's tabs, or swap
+-- when it has none). The set still shows while the trigger is held.
 local function TriggerSwap(step)
   if WP.placing then return end   -- the triggers pick the set to place on
-  if WP.set ~= 0 or not Nav.Active() or not Nav.root or not Nav.HasTabs(Nav.root) then return end
+  if WP.set ~= 0 or not Nav.Active() or not Nav.root then return end
   if table.getn(Nav.roots) > 1 then Nav.CycleRoot(step) end
 end
 
