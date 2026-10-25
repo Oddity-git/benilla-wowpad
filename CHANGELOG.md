@@ -9,10 +9,7 @@ the installer takes an older copy of them out first, and keeps using the older c
 that is not new enough for the refreshed one.
 
 - The engine patches 01 (the gamepad bar's own action slots) and 02 (crosshair tooltips while the
-  camera turns) fit upstream benilla as of 25 Oct 2026 and the physics fork built on it.
-- `tools/update-benilla-personal.sh`: when the physics fork changes the lines WowPad's engine
-  patches sit on, the patch commits are taken out before the merge (the patch step puts the
-  current ones back), instead of stopping on a conflict.
+  camera turns) fit upstream benilla as of 25 Oct 2026.
 
 ## 0.2.0
 
