@@ -1,15 +1,15 @@
 diff --git a/crates/benilla-app/src/target/hover.rs b/crates/benilla-app/src/target/hover.rs
-index a560c7a83..5b32c773d 100644
+index 232504ec..d05ff364 100644
 --- a/crates/benilla-app/src/target/hover.rs
 +++ b/crates/benilla-app/src/target/hover.rs
-@@ -38,13 +38,18 @@ pub(super) fn update_pick_occlusion(
-     doodads: DoodadOccluders,
+@@ -86,13 +86,18 @@ pub(super) fn update_pick_occlusion(
+     trace: OcclusionTrace,
      probe: Res<super::hover_probe::ProbeAim>,
      mut occlusion: ResMut<PickOcclusion>,
 +    (rig, look_aim): (Res<CameraControl>, Option<Res<benilla_world::view::LookAim>>),
  ) {
      *occlusion = PickOcclusion::default();
-     let (Ok((camera, cam_tf)), Ok(window)) = (camera.single(), window.single()) else {
+     let Ok(window) = window.single() else {
          return;
      };
 -    // A cursorless window traces from the hover probe's aim, as the picks do.
@@ -22,8 +22,8 @@ index a560c7a83..5b32c773d 100644
 +    else {
          return;
      };
-     let Ok(ray) = camera.viewport_to_world(cam_tf, cursor) else {
-@@ -79,6 +84,11 @@ pub(super) fn aim_and_trace(
+     let Some(ray) = cursor_ray(&camera, cursor) else {
+@@ -108,6 +113,11 @@ pub(super) fn aim_and_trace(
      (super::hover_probe::aim_frame, update_pick_occlusion).chain()
  }
  
@@ -35,7 +35,7 @@ index a560c7a83..5b32c773d 100644
  /// The model instances whose parts are `unit`'s pick geometry: the body, everything it wears, and
  /// its mount. The reference's `0x480d90` walks the CM2 attachment tree (`[model+0x1dc]` head,
  /// `[+0x1e4]` sibling) and registers each model (`0x713cb0`) under one candidate, so a hit on a
-@@ -198,7 +208,7 @@ fn posed_parts<'a>(
+@@ -513,7 +523,7 @@ impl UnitPicker<'_, '_> {
  pub(super) fn update_hover(
      camera: Query<(&Camera, &GlobalTransform), With<WorldCamera>>,
      window: Query<&Window, With<PrimaryWindow>>,
@@ -44,7 +44,7 @@ index a560c7a83..5b32c773d 100644
      pointer_over_ui: Res<PointerOverUi>,
      occlusion: Res<PickOcclusion>,
      // The unit whose plate holds the hover after this frame's UI walk.
-@@ -268,14 +278,16 @@ pub(super) fn update_hover(
+@@ -535,11 +545,13 @@ pub(super) fn update_hover(
              return;
          }
      }
@@ -52,18 +52,15 @@ index a560c7a83..5b32c773d 100644
 +    // The aim point is not the pointer: the UI under the parked pointer does not take it.
 +    let aim = look_point(&rig, look_aim.as_deref());
 +    if aim.is_none() && (rig.is_looking() || pointer_over_ui.0) {
-         *last_pick = None;
+         sticky.unit = None;
          return;
      }
-     let (Ok((camera, cam_tf)), Ok(window)) = (camera.single(), window.single()) else {
+-    let Some(cursor) = window.single().ok().and_then(Window::cursor_position) else {
++    let Some(cursor) = aim.or(window.single().ok().and_then(Window::cursor_position)) else {
          return;
      };
--    let Some(cursor) = window.cursor_position() else {
-+    let Some(cursor) = aim.or(window.cursor_position()) else {
-         return;
-     };
-     let Ok(ray) = camera.viewport_to_world(cam_tf, cursor) else {
-@@ -565,7 +577,7 @@ impl GoGateInputs<'_> {
+     let Some(ray) = cursor_ray(&camera, cursor) else {
+@@ -923,7 +935,7 @@ impl ObjectPicker<'_, '_> {
  pub(super) fn update_hovered_object(
      camera: Query<(&Camera, &GlobalTransform), With<WorldCamera>>,
      window: Query<&Window, With<PrimaryWindow>>,
@@ -72,7 +69,7 @@ index a560c7a83..5b32c773d 100644
      pointer_over_ui: Res<PointerOverUi>,
      occlusion: Res<PickOcclusion>,
      // The unit pick, earlier in the chain: a unit hover keeps the GameObject halo shut.
-@@ -609,7 +621,8 @@ pub(super) fn update_hovered_object(
+@@ -936,7 +948,8 @@ pub(super) fn update_hovered_object(
      hovered.guid = None;
      hovered.distance = f32::MAX;
      // The sticky pick drops the moment the pointer is not ours.
@@ -80,9 +77,9 @@ index a560c7a83..5b32c773d 100644
 +    let aim = look_point(&rig, look_aim.as_deref());
 +    let yielded = aim.is_none() && (rig.is_looking() || pointer_over_ui.0);
      if yielded {
-         *last_pick = None;
+         sticky.object = None;
      }
-@@ -622,7 +635,7 @@ pub(super) fn update_hovered_object(
+@@ -947,7 +960,7 @@ pub(super) fn update_hovered_object(
      if yielded {
          return;
      }
@@ -90,9 +87,9 @@ index a560c7a83..5b32c773d 100644
 +    let Some(cursor) = aim.or(window.cursor_position()).or(probe_aim) else {
          return;
      };
-     if pickable.is_empty() {
+     let Ok(ray) = cam.0.viewport_to_world(cam.1, cursor) else {
 diff --git a/crates/benilla-world/src/view.rs b/crates/benilla-world/src/view.rs
-index ed8b8646d..4c04cd3bb 100644
+index a11266f2..46d17349 100644
 --- a/crates/benilla-world/src/view.rs
 +++ b/crates/benilla-world/src/view.rs
 @@ -289,6 +289,13 @@ pub fn within_farclip(
@@ -106,6 +103,6 @@ index ed8b8646d..4c04cd3bb 100644
 +#[derive(Resource, Default, Clone, Copy, Debug)]
 +pub struct LookAim(pub Option<Vec2>);
 +
- /// The `$WOW_MSAA` knob as a Bevy `Msaa` level, 4x when unset. `8` falls back to 4x:
- /// `Rgba16Float` is only guaranteed `[1, 4]` samples, and there is no adapter to ask here.
- pub fn msaa_from_env() -> bevy::render::view::Msaa {
+ /// The `nearclip` CVar's registered default, 0.1 (the string at `0x84fb48`, registered at
+ /// `0x68867a`, record `[0xc7f348]`); the camera ctor's 1/9 (`0x50a6c0`) is overwritten from the
+ /// record in the first frame, before it renders. The small near keeps the waterline-crossing band
